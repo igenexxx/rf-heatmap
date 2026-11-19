@@ -1,0 +1,330 @@
+package ui
+
+import (
+	"encoding/binary"
+	"fmt"
+	"os"
+)
+
+const (
+	ScreenW = 320
+	ScreenH = 170
+)
+
+// RGB565 converts 8-bit R, G, B into 16-bit RGB565.
+func RGB565(r, g, b uint8) uint16 {
+	return uint16(r&0xF8)<<8 | uint16(g&0xFC)<<3 | uint16(b)>>3
+}
+
+// Theme colors.
+var (
+	ColBg        = RGB565(8, 12, 22)
+	ColPanel     = RGB565(16, 23, 38)
+	ColPanelAlt  = RGB565(22, 32, 52)
+	ColBorder    = RGB565(36, 52, 78)
+	ColText      = RGB565(235, 242, 255)
+	ColMuted     = RGB565(130, 148, 175)
+	ColCyan      = RGB565(0, 235, 255)
+	ColAmber     = RGB565(255, 175, 0)
+	ColGreen     = RGB565(34, 211, 120)
+	ColRed       = RGB565(244, 63, 94)
+	ColMagenta   = RGB565(217, 70, 239)
+	ColNavBg     = RGB565(12, 18, 30)
+	ColNavActive = RGB565(0, 95, 120)
+)
+
+// NavKeyCenters are the official CardputerZero X coordinates aligned to physical keys 4..8.
+var NavKeyCenters = [5]int{49, 105, 161, 217, 273}
+
+// ThermalColor maps an RSSI value in dBm (-110..-35) to an Inferno-style RGB565 color.
+func ThermalColor(dbm int32) uint16 {
+	const minDB = -110.0
+	const maxDB = -35.0
+	t := (float64(dbm) - minDB) / (maxDB - minDB)
+	if t < 0 {
+		t = 0
+	} else if t > 1 {
+		t = 1
+	}
+	// 5-stop Inferno gradient: midnight -> indigo -> crimson/magenta -> orange -> bright yellow-white.
+	type stop struct {
+		pos     float64
+		r, g, b float64
+	}
+	stops := []stop{
+		{0.00, 6, 10, 24},
+		{0.25, 48, 18, 110},
+		{0.50, 168, 32, 102},
+		{0.78, 250, 120, 16},
+		{1.00, 255, 248, 185},
+	}
+	for i := 0; i < len(stops)-1; i++ {
+		a, b := stops[i], stops[i+1]
+		if t >= a.pos && t <= b.pos {
+			u := (t - a.pos) / (b.pos - a.pos)
+			r := uint8(a.r + (b.r-a.r)*u)
+			g := uint8(a.g + (b.g-a.g)*u)
+			bl := uint8(a.b + (b.b-a.b)*u)
+			return RGB565(r, g, bl)
+		}
+	}
+	return RGB565(255, 248, 185)
+}
+
+// Canvas is a double-buffered 320x170 RGB565 drawing surface.
+type Canvas struct {
+	pix    [ScreenW * ScreenH]uint16
+	rawBuf [ScreenW * ScreenH * 2]byte
+	fbFile *os.File
+}
+
+// NewCanvas creates an offscreen canvas, optionally backed by a Linux framebuffer device.
+func NewCanvas(fbPath string) (*Canvas, error) {
+	c := &Canvas{}
+	if fbPath != "" {
+		f, err := os.OpenFile(fbPath, os.O_RDWR, 0)
+		if err != nil {
+			return nil, fmt.Errorf("open framebuffer %s: %w", fbPath, err)
+		}
+		c.fbFile = f
+	}
+	return c, nil
+}
+
+// Close closes the framebuffer file if open.
+func (c *Canvas) Close() error {
+	if c.fbFile != nil {
+		return c.fbFile.Close()
+	}
+	return nil
+}
+
+// Flush writes the RGB565 backbuffer to /dev/fb0 in a single write.
+func (c *Canvas) Flush() error {
+	if c.fbFile == nil {
+		return nil
+	}
+	for i, px := range c.pix {
+		binary.LittleEndian.PutUint16(c.rawBuf[i*2:i*2+2], px)
+	}
+	_, err := c.fbFile.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+	_, err = c.fbFile.Write(c.rawBuf[:])
+	return err
+}
+
+// Clear fills the canvas with col.
+func (c *Canvas) Clear(col uint16) {
+	for i := range c.pix {
+		c.pix[i] = col
+	}
+}
+
+// SetPixel sets a pixel with bounds clipping.
+func (c *Canvas) SetPixel(x, y int, col uint16) {
+	if x < 0 || x >= ScreenW || y < 0 || y >= ScreenH {
+		return
+	}
+	c.pix[y*ScreenW+x] = col
+}
+
+// FillRect draws a filled rectangle.
+func (c *Canvas) FillRect(x, y, w, h int, col uint16) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	x0, y0 := max(0, x), max(0, y)
+	x1, y1 := min(ScreenW, x+w), min(ScreenH, y+h)
+	for py := y0; py < y1; py++ {
+		row := py * ScreenW
+		for px := x0; px < x1; px++ {
+			c.pix[row+px] = col
+		}
+	}
+}
+
+// DrawRect draws a 1px outline rectangle.
+func (c *Canvas) DrawRect(x, y, w, h int, col uint16) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	c.HLine(x, y, w, col)
+	c.HLine(x, y+h-1, w, col)
+	c.VLine(x, y, h, col)
+	c.VLine(x+w-1, y, h, col)
+}
+
+// HLine draws a horizontal line.
+func (c *Canvas) HLine(x, y, w int, col uint16) {
+	if y < 0 || y >= ScreenH || w <= 0 {
+		return
+	}
+	x0, x1 := max(0, x), min(ScreenW, x+w)
+	row := y * ScreenW
+	for px := x0; px < x1; px++ {
+		c.pix[row+px] = col
+	}
+}
+
+// VLine draws a vertical line.
+func (c *Canvas) VLine(x, y, h int, col uint16) {
+	if x < 0 || x >= ScreenW || h <= 0 {
+		return
+	}
+	y0, y1 := max(0, y), min(ScreenH, y+h)
+	for py := y0; py < y1; py++ {
+		c.pix[py*ScreenW+x] = col
+	}
+}
+
+// DrawText renders ASCII text using a crisp 5x7 bitmap font at integer scale (1 or 2).
+func (c *Canvas) DrawText(x, y int, text string, col uint16, scale int) {
+	if scale < 1 {
+		scale = 1
+	}
+	cx := x
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		if ch == '\n' {
+			cx = x
+			y += 9 * scale
+			continue
+		}
+		glyph := glyph5x7(ch)
+		for colIdx := 0; colIdx < 5; colIdx++ {
+			bits := glyph[colIdx]
+			for rowIdx := 0; rowIdx < 7; rowIdx++ {
+				if (bits>>uint(rowIdx))&1 != 0 {
+					if scale == 1 {
+						c.SetPixel(cx+colIdx, y+rowIdx, col)
+					} else {
+						c.FillRect(cx+colIdx*scale, y+rowIdx*scale, scale, scale, col)
+					}
+				}
+			}
+		}
+		cx += 6 * scale
+	}
+}
+
+// DrawTextCentered renders text horizontally centered at centerX.
+func (c *Canvas) DrawTextCentered(centerX, y int, text string, col uint16, scale int) {
+	if scale < 1 {
+		scale = 1
+	}
+	w := len(text) * 6 * scale
+	c.DrawText(centerX-w/2, y, text, col, scale)
+}
+
+// PixelAt returns the RGB565 pixel at (x, y) for testing.
+func (c *Canvas) PixelAt(x, y int) uint16 {
+	if x < 0 || x >= ScreenW || y < 0 || y >= ScreenH {
+		return 0
+	}
+	return c.pix[y*ScreenW+x]
+}
+
+// 5x7 column-major bitmap font (LSB = top row).
+var font5x7 = map[byte][5]uint8{
+	' ':  {0x00, 0x00, 0x00, 0x00, 0x00},
+	'!':  {0x00, 0x00, 0x5F, 0x00, 0x00},
+	'"':  {0x00, 0x07, 0x00, 0x07, 0x00},
+	'#':  {0x14, 0x7F, 0x14, 0x7F, 0x14},
+	'$':  {0x24, 0x2A, 0x7F, 0x2A, 0x12},
+	'%':  {0x23, 0x13, 0x08, 0x64, 0x62},
+	'&':  {0x36, 0x49, 0x55, 0x22, 0x50},
+	'\'': {0x00, 0x05, 0x03, 0x00, 0x00},
+	'(':  {0x00, 0x1C, 0x22, 0x41, 0x00},
+	')':  {0x00, 0x41, 0x22, 0x1C, 0x00},
+	'*':  {0x14, 0x08, 0x3E, 0x08, 0x14},
+	'+':  {0x08, 0x08, 0x3E, 0x08, 0x08},
+	',':  {0x00, 0x50, 0x30, 0x00, 0x00},
+	'-':  {0x08, 0x08, 0x08, 0x08, 0x08},
+	'.':  {0x00, 0x60, 0x60, 0x00, 0x00},
+	'/':  {0x20, 0x10, 0x08, 0x04, 0x02},
+	'0':  {0x3E, 0x51, 0x49, 0x45, 0x3E},
+	'1':  {0x00, 0x42, 0x7F, 0x40, 0x00},
+	'2':  {0x42, 0x61, 0x51, 0x49, 0x46},
+	'3':  {0x21, 0x41, 0x45, 0x4B, 0x31},
+	'4':  {0x18, 0x14, 0x12, 0x7F, 0x10},
+	'5':  {0x27, 0x45, 0x45, 0x45, 0x39},
+	'6':  {0x3C, 0x4A, 0x49, 0x49, 0x30},
+	'7':  {0x01, 0x71, 0x09, 0x05, 0x03},
+	'8':  {0x36, 0x49, 0x49, 0x49, 0x36},
+	'9':  {0x06, 0x49, 0x49, 0x29, 0x1E},
+	':':  {0x00, 0x36, 0x36, 0x00, 0x00},
+	';':  {0x00, 0x56, 0x36, 0x00, 0x00},
+	'<':  {0x08, 0x14, 0x22, 0x41, 0x00},
+	'=':  {0x14, 0x14, 0x14, 0x14, 0x14},
+	'>':  {0x00, 0x41, 0x22, 0x14, 0x08},
+	'?':  {0x02, 0x01, 0x51, 0x09, 0x06},
+	'@':  {0x32, 0x49, 0x79, 0x41, 0x3E},
+	'A':  {0x7E, 0x11, 0x11, 0x11, 0x7E},
+	'B':  {0x7F, 0x49, 0x49, 0x49, 0x36},
+	'C':  {0x3E, 0x41, 0x41, 0x41, 0x22},
+	'D':  {0x7F, 0x41, 0x41, 0x22, 0x1C},
+	'E':  {0x7F, 0x49, 0x49, 0x49, 0x41},
+	'F':  {0x7F, 0x09, 0x09, 0x09, 0x01},
+	'G':  {0x3E, 0x41, 0x49, 0x49, 0x7A},
+	'H':  {0x7F, 0x08, 0x08, 0x08, 0x7F},
+	'I':  {0x00, 0x41, 0x7F, 0x41, 0x00},
+	'J':  {0x20, 0x40, 0x41, 0x3F, 0x01},
+	'K':  {0x7F, 0x08, 0x14, 0x22, 0x41},
+	'L':  {0x7F, 0x40, 0x40, 0x40, 0x40},
+	'M':  {0x7F, 0x02, 0x0C, 0x02, 0x7F},
+	'N':  {0x7F, 0x04, 0x08, 0x10, 0x7F},
+	'O':  {0x3E, 0x41, 0x41, 0x41, 0x3E},
+	'P':  {0x7F, 0x09, 0x09, 0x09, 0x06},
+	'Q':  {0x3E, 0x41, 0x51, 0x21, 0x5E},
+	'R':  {0x7F, 0x09, 0x19, 0x29, 0x46},
+	'S':  {0x46, 0x49, 0x49, 0x49, 0x31},
+	'T':  {0x01, 0x01, 0x7F, 0x01, 0x01},
+	'U':  {0x3F, 0x40, 0x40, 0x40, 0x3F},
+	'V':  {0x1F, 0x20, 0x40, 0x20, 0x1F},
+	'W':  {0x3F, 0x40, 0x38, 0x40, 0x3F},
+	'X':  {0x63, 0x14, 0x08, 0x14, 0x63},
+	'Y':  {0x07, 0x08, 0x70, 0x08, 0x07},
+	'Z':  {0x61, 0x51, 0x49, 0x45, 0x43},
+	'[':  {0x00, 0x7F, 0x41, 0x41, 0x00},
+	'\\': {0x02, 0x04, 0x08, 0x10, 0x20},
+	']':  {0x00, 0x41, 0x41, 0x7F, 0x00},
+	'^':  {0x04, 0x02, 0x01, 0x02, 0x04},
+	'_':  {0x40, 0x40, 0x40, 0x40, 0x40},
+	'`':  {0x00, 0x01, 0x02, 0x04, 0x00},
+	'a':  {0x20, 0x54, 0x54, 0x54, 0x78},
+	'b':  {0x7F, 0x48, 0x44, 0x44, 0x38},
+	'c':  {0x38, 0x44, 0x44, 0x44, 0x20},
+	'd':  {0x38, 0x44, 0x44, 0x48, 0x7F},
+	'e':  {0x38, 0x54, 0x54, 0x54, 0x18},
+	'f':  {0x08, 0x7E, 0x09, 0x01, 0x02},
+	'g':  {0x0C, 0x52, 0x52, 0x52, 0x3E},
+	'h':  {0x7F, 0x08, 0x04, 0x04, 0x78},
+	'i':  {0x00, 0x44, 0x7D, 0x40, 0x00},
+	'j':  {0x20, 0x40, 0x44, 0x3D, 0x00},
+	'k':  {0x7F, 0x10, 0x28, 0x44, 0x00},
+	'l':  {0x00, 0x41, 0x7F, 0x40, 0x00},
+	'm':  {0x7C, 0x04, 0x18, 0x04, 0x78},
+	'n':  {0x7C, 0x08, 0x04, 0x04, 0x78},
+	'o':  {0x38, 0x44, 0x44, 0x44, 0x38},
+	'p':  {0x7C, 0x14, 0x14, 0x14, 0x08},
+	'q':  {0x08, 0x14, 0x14, 0x18, 0x7C},
+	'r':  {0x7C, 0x08, 0x04, 0x04, 0x08},
+	's':  {0x48, 0x54, 0x54, 0x54, 0x20},
+	't':  {0x04, 0x3F, 0x44, 0x40, 0x20},
+	'u':  {0x3C, 0x40, 0x40, 0x20, 0x7C},
+	'v':  {0x1C, 0x20, 0x40, 0x20, 0x1C},
+	'w':  {0x3C, 0x40, 0x30, 0x40, 0x3C},
+	'x':  {0x44, 0x28, 0x10, 0x28, 0x44},
+	'y':  {0x0C, 0x50, 0x50, 0x50, 0x3C},
+	'z':  {0x44, 0x64, 0x54, 0x4C, 0x44},
+	'|':  {0x00, 0x00, 0x7F, 0x00, 0x00},
+}
+
+func glyph5x7(ch byte) [5]uint8 {
+	if g, ok := font5x7[ch]; ok {
+		return g
+	}
+	return font5x7['?']
+}

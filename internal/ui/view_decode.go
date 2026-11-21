@@ -91,7 +91,13 @@ func (a *App) drawDecodeBanner(c *Canvas) {
 	c.DrawRect(6, 21, 308, 42, ColCyan)
 	if a.LastDecoded != nil {
 		a.drawDecodedBannerContent(c, a.LastDecoded)
+		if a.HasFreqOffset {
+			drawFreqDriftBadge(c, 236, 52, a.FreqOffsetHz)
+		}
 		return
+	}
+	if a.HasFreqOffset {
+		drawFreqDriftBadge(c, 236, 52, a.FreqOffsetHz)
 	}
 	if a.HasPrediction {
 		predCol := ColCyan

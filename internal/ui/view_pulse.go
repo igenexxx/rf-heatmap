@@ -116,6 +116,10 @@ func (a *App) stepLiveChannel() {
 		if v, err := a.Radio.ReadRSSIDBm(); err == nil {
 			a.LiveRSSI = v
 		}
+		if off, err := a.Radio.ReadFreqOffsetHz(); err == nil {
+			a.FreqOffsetHz = off
+			a.HasFreqOffset = true
+		}
 	} else {
 		a.LiveRSSI = a.sampleSimLiveChannel()
 	}
@@ -189,11 +193,24 @@ func (a *App) drawPulseTopCard(c *Canvas, effSq int32) {
 		rssiColor = ColGreen
 	}
 	c.DrawText(206, 26, fmt.Sprintf("%4ddBm", a.LiveRSSI), rssiColor, 2)
+	if a.HasFreqOffset {
+		c.DrawText(12, 44, fmt.Sprintf("ASQ:%ddBm RAW:%d", effSq, len(a.CapturedRaw)), ColMuted, 1)
+		drawFreqDriftBadge(c, 236, 44, a.FreqOffsetHz)
+		return
+	}
 	if a.AutoSquelch && a.LiveBaseline != nil {
 		c.DrawText(12, 44, fmt.Sprintf("ASQ:%ddBm(k%.1f) RAW:%d [S:MAN F/X:K]", effSq, a.LiveBaseline.SquelchK(), len(a.CapturedRaw)), ColMuted, 1)
 		return
 	}
 	c.DrawText(12, 44, fmt.Sprintf("SQ:%ddBm  RAW:%d  [S:AUTO F/X:SQ]", a.SquelchDBm, len(a.CapturedRaw)), ColMuted, 1)
+}
+
+func drawFreqDriftBadge(c *Canvas, x, y int, offsetHz int32) {
+	col := ColCyan
+	if offsetHz > 5000 || offsetHz < -5000 {
+		col = ColAmber
+	}
+	c.DrawText(x, y, fmt.Sprintf("DF:%+.1fkHz", float64(offsetHz)/1000.0), col, 1)
 }
 
 func (a *App) drawPulseScope(c *Canvas, effSq int32) {

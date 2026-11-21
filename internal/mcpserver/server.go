@@ -287,6 +287,20 @@ func (s *Server) dispatchTool(name string, rawArgs json.RawMessage) (*toolCallRe
 		return s.toolFoxhuntSample(rawArgs)
 	case "rf_trim_raw":
 		return s.toolTrimRaw(rawArgs)
+	case "rf_measure_freq_offset":
+		return s.toolMeasureFreqOffset(rawArgs)
+	case "rf_set_tx_power":
+		return s.toolSetTXPower(rawArgs)
+	case "rf_wor_listen":
+		return s.toolWORListen(rawArgs)
+	case "rf_send_packet":
+		return s.toolSendPacket(rawArgs)
+	case "rf_recv_packet":
+		return s.toolRecvPacket(rawArgs)
+	case "rf_decode_pocsag":
+		return s.toolDecodePOCSAG(rawArgs)
+	case "rf_decode_wmbus":
+		return s.toolDecodeWMBus(rawArgs)
 	default:
 		return nil, &rpcError{Code: errCodeInvalidParams, Message: fmt.Sprintf("unknown tool: %s", name)}
 	}

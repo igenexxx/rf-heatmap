@@ -167,6 +167,9 @@ func (a *App) ApplySettings(s config.Settings) {
 	if a.Probe != nil {
 		a.Probe.SetIntervalMs(s.ProbeIntervalMs)
 	}
+	if a.Radio != nil {
+		_ = a.Radio.SetTXPowerDBm(a.ActiveFreq, s.TXPowerDBm)
+	}
 }
 
 // SetToast displays a brief status message.

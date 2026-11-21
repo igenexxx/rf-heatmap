@@ -144,8 +144,9 @@ var helpPages = []helpPageContent{
 			" 650kHz=wide catch, 270kHz=low noise.",
 			"FM238/FM476: 2-FSK (2.38/47.6kHz dev).",
 			"4(REC) captures RAW GDO0 pulses.",
-			"5(TX) replays, 6(SAVE) writes .sub",
-			" files compatible with Flipper Zero.",
+			"5(TX) replays, 6(SAVE) writes .sub.",
+			"DF:±kHz shows CC1101 FREQEST drift.",
+			"SET -> TX Power steps -30..+10 dBm.",
 		},
 	},
 	{

@@ -13,6 +13,8 @@ All specifications strictly obey the repository's DDD contracts in [DOMAIN.md](.
 | **01** | [01-rolling-code-and-decoders.md](01-rolling-code-and-decoders.md) | `US-RF-1.1` – `US-RF-1.4` | `internal/subfile`, `internal/ui`, `internal/mcpserver` | `rf_analyze_rolling_code` |
 | **02** | [02-fsk-tpms-weather.md](02-fsk-tpms-weather.md) | `US-RF-2.1` – `US-RF-2.4` | `internal/cc1101`, `internal/sensors`, `internal/ui`, `internal/mcpserver` | `rf_decode_sensor` |
 | **03** | [03-foxhunt-and-raw-trimmer.md](03-foxhunt-and-raw-trimmer.md) | `US-RF-3.1` – `US-RF-3.4` | `internal/rfml`, `internal/subfile`, `internal/library`, `internal/ui`, `internal/mcpserver` | `rf_foxhunt_sample`, `rf_trim_raw` |
+| **04** | [04-freqest-txpower-and-wor.md](04-freqest-txpower-and-wor.md) | `US-RF-4.1` – `US-RF-4.3` | `internal/cc1101`, `internal/config`, `internal/ui`, `internal/mcpserver` | `rf_measure_freq_offset`, `rf_set_tx_power`, `rf_wor_listen` |
+| **05** | [05-packet-engine-chat-and-pocsag-wmbus.md](05-packet-engine-chat-and-pocsag-wmbus.md) | `US-RF-5.1` – `US-RF-5.3` | `internal/cc1101`, `internal/sensors`, `internal/mcpserver` | `rf_send_packet`, `rf_recv_packet`, `rf_decode_pocsag`, `rf_decode_wmbus` |
 
 ---
 

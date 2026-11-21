@@ -103,14 +103,16 @@ type SavedEntry struct {
 	File *subfile.SubFile
 }
 
-// RadioState holds transceiver handle, active tuning, modulation preset, and manual squelch.
+// RadioState holds transceiver handle, active tuning, modulation preset, manual squelch, and live FREQEST drift.
 type RadioState struct {
-	Radio      *cc1101.Radio // nil when running in simulator mode
-	SimMode    bool
-	BandIdx    int
-	Preset     cc1101.Preset
-	ActiveFreq uint32
-	SquelchDBm int32
+	Radio         *cc1101.Radio // nil when running in simulator mode
+	SimMode       bool
+	BandIdx       int
+	Preset        cc1101.Preset
+	ActiveFreq    uint32
+	SquelchDBm    int32
+	FreqOffsetHz  int32
+	HasFreqOffset bool
 }
 
 // HeatmapState holds spectrum sweep buffers, peak-hold, cursor, and waterfall ring.

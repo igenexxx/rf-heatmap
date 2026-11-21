@@ -229,10 +229,10 @@ func TestJSONRPCProtocolHandshakeAndErrors(t *testing.T) {
 	if _, ok := resps[2]["result"].(map[string]any); !ok {
 		t.Fatalf("ping result missing: %+v", resps[2])
 	}
-	// 3: tools/list has all 26 tools
+	// 3: tools/list has all 33 tools
 	tools := resps[3]["result"].(map[string]any)["tools"].([]any)
-	if len(tools) != 26 {
-		t.Fatalf("tools/list count = %d, want 26", len(tools))
+	if len(tools) != 33 {
+		t.Fatalf("tools/list count = %d, want 33", len(tools))
 	}
 	wantTools := map[string]bool{
 		"rf_get_status":           false,
@@ -261,6 +261,13 @@ func TestJSONRPCProtocolHandshakeAndErrors(t *testing.T) {
 		"rf_decode_sensor":        false,
 		"rf_foxhunt_sample":       false,
 		"rf_trim_raw":             false,
+		"rf_measure_freq_offset":  false,
+		"rf_set_tx_power":         false,
+		"rf_wor_listen":           false,
+		"rf_send_packet":          false,
+		"rf_recv_packet":          false,
+		"rf_decode_pocsag":        false,
+		"rf_decode_wmbus":         false,
 	}
 	for _, rawT := range tools {
 		tm := rawT.(map[string]any)

@@ -23,6 +23,18 @@ type RadioBackend interface {
 	Idle() error
 }
 
+// HardwareUnlockBackend is an optional extension implemented by CC1101Backend for
+// FREQEST/LQI telemetry, band PATABLE power control, Wake-On-Radio, and 64B FIFO packets.
+type HardwareUnlockBackend interface {
+	ReadFreqOffsetHz() (int32, error)
+	ReadLQI() (uint8, bool, error)
+	SetTXPowerDBm(freqHz uint32, dbm int) error
+	ConfigureWOR(intervalMs uint16) error
+	EnterWOR() error
+	SendPacket(ctx context.Context, cfg cc1101.PacketConfig, payload []byte) error
+	RecvPacket(ctx context.Context, cfg cc1101.PacketConfig, timeout time.Duration) (cc1101.ReceivedPacket, error)
+}
+
 // CC1101Backend wraps a real *cc1101.Radio with a mutex to serialize all SPI/GPIO access.
 type CC1101Backend struct {
 	mu    sync.Mutex
@@ -72,6 +84,48 @@ func (b *CC1101Backend) Idle() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.radio.Idle()
+}
+
+func (b *CC1101Backend) ReadFreqOffsetHz() (int32, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.ReadFreqOffsetHz()
+}
+
+func (b *CC1101Backend) ReadLQI() (uint8, bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.ReadLQI()
+}
+
+func (b *CC1101Backend) SetTXPowerDBm(freqHz uint32, dbm int) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.SetTXPowerDBm(freqHz, dbm)
+}
+
+func (b *CC1101Backend) ConfigureWOR(intervalMs uint16) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.ConfigureWOR(intervalMs)
+}
+
+func (b *CC1101Backend) EnterWOR() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.EnterWOR()
+}
+
+func (b *CC1101Backend) SendPacket(ctx context.Context, cfg cc1101.PacketConfig, payload []byte) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.SendPacket(ctx, cfg, payload)
+}
+
+func (b *CC1101Backend) RecvPacket(ctx context.Context, cfg cc1101.PacketConfig, timeout time.Duration) (cc1101.ReceivedPacket, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.RecvPacket(ctx, cfg, timeout)
 }
 
 func (s *Server) sampleFreqLocked(freqHz uint32, sweepIdx, binIdx, totalBins int) (int32, error) {

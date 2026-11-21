@@ -23,7 +23,33 @@ const (
 	MaxProbeIntervalMs = 5000
 	// DefaultProbeIntervalMs is the default Auto-Probe delay between transmissions.
 	DefaultProbeIntervalMs = 1000
+
+	// DefaultTXPowerDBm is the default CC1101 TX power in dBm.
+	DefaultTXPowerDBm = 10
 )
+
+// AllowedTXPowerDBm lists the supported CC1101 TX power steps in dBm.
+var AllowedTXPowerDBm = [6]int{-30, -20, -10, 0, 5, 10}
+
+// ClampTXPowerDBm clamps dbm to the nearest supported step in AllowedTXPowerDBm.
+func ClampTXPowerDBm(dbm int) int {
+	best := AllowedTXPowerDBm[0]
+	bestDiff := dbm - best
+	if bestDiff < 0 {
+		bestDiff = -bestDiff
+	}
+	for _, lvl := range AllowedTXPowerDBm[1:] {
+		d := dbm - lvl
+		if d < 0 {
+			d = -d
+		}
+		if d < bestDiff {
+			best = lvl
+			bestDiff = d
+		}
+	}
+	return best
+}
 
 // Settings holds persisted user preferences for rf-heatmap.
 // Opt-in services such as the MCP server are disabled by default.
@@ -33,6 +59,7 @@ type Settings struct {
 	AutoLock        bool    `json:"auto_lock"`
 	SquelchK        float64 `json:"squelch_k"`
 	ProbeIntervalMs int     `json:"probe_interval_ms"`
+	TXPowerDBm      int     `json:"tx_power_dbm"`
 }
 
 // DefaultSettings returns the safe default application settings.
@@ -43,6 +70,7 @@ func DefaultSettings() Settings {
 		AutoLock:        true,
 		SquelchK:        DefaultSquelchK,
 		ProbeIntervalMs: DefaultProbeIntervalMs,
+		TXPowerDBm:      DefaultTXPowerDBm,
 	}
 }
 
@@ -64,6 +92,7 @@ func (s Settings) Normalize() Settings {
 	} else if s.ProbeIntervalMs > MaxProbeIntervalMs {
 		s.ProbeIntervalMs = MaxProbeIntervalMs
 	}
+	s.TXPowerDBm = ClampTXPowerDBm(s.TXPowerDBm)
 	return s
 }
 

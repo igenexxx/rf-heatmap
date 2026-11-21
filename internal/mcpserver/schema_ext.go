@@ -1,7 +1,7 @@
 package mcpserver
 
 func (s *Server) extToolDefinitions() []toolDefinition {
-	return []toolDefinition{
+	base := []toolDefinition{
 		{
 			Name:        "rf_analyze_rolling_code",
 			Description: "Analyze 1 to 8 Sub-GHz RAW_Data captures for KeeLoq/HCS301, Somfy Telis, or generic consecutive rolling-code behavior.",
@@ -143,4 +143,5 @@ func (s *Server) extToolDefinitions() []toolDefinition {
 			},
 		},
 	}
+	return append(base, s.unlockToolDefinitions()...)
 }

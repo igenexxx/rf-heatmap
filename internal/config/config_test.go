@@ -99,9 +99,47 @@ func TestLoadPartialJSONPreservesDefaults(t *testing.T) {
 		AutoLock:        true,
 		SquelchK:        DefaultSquelchK,
 		ProbeIntervalMs: DefaultProbeIntervalMs,
+		TXPowerDBm:      DefaultTXPowerDBm,
 	}
 	if got != want {
 		t.Fatalf("Load(partial) = %+v, want %+v", got, want)
+	}
+}
+
+func TestTXPowerDBmClampingAndPersistence(t *testing.T) {
+	tests := []struct {
+		name  string
+		input int
+		want  int
+	}{
+		{"below_min", -100, -30},
+		{"exact_neg30", -30, -30},
+		{"mid_neg25", -25, -30},
+		{"mid_neg14", -14, -10},
+		{"exact_zero", 0, 0},
+		{"mid_3", 3, 5},
+		{"exact_10", 10, 10},
+		{"above_max", 42, 10},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := DefaultSettings()
+			s.TXPowerDBm = tc.input
+			if got := s.Normalize().TXPowerDBm; got != tc.want {
+				t.Fatalf("Normalize(%d).TXPowerDBm = %d, want %d", tc.input, got, tc.want)
+			}
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := Save(path, s); err != nil {
+				t.Fatalf("Save failed: %v", err)
+			}
+			loaded, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load failed: %v", err)
+			}
+			if loaded.TXPowerDBm != tc.want {
+				t.Fatalf("loaded TXPowerDBm = %d, want %d", loaded.TXPowerDBm, tc.want)
+			}
+		})
 	}
 }
 

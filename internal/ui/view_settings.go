@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	settingsRowCount    = 7
+	settingsRowCount    = 8
 	settingsVisibleRows = 5
 )
 
@@ -26,9 +26,9 @@ func (a *App) handleSettingsKey(act KeyAction) {
 	case KeyDown:
 		a.SettingsIdx = min(settingsRowCount-1, a.SettingsIdx+1)
 	case KeyLeft:
-		a.adjustSquelchKSetting(-0.5)
+		a.adjustSelectedSetting(-1)
 	case KeyRight:
-		a.adjustSquelchKSetting(0.5)
+		a.adjustSelectedSetting(1)
 	case KeyEnter, KeySpace, KeyNav4:
 		a.toggleSelectedSetting()
 	case KeyNav5:
@@ -41,6 +41,31 @@ func (a *App) handleSettingsKey(act KeyAction) {
 		a.ShowHelp = true
 		a.HelpPage = 0
 	}
+}
+
+func (a *App) adjustSelectedSetting(dir int) {
+	switch a.SettingsIdx {
+	case 3:
+		a.adjustSquelchKSetting(0.5 * float64(dir))
+	case 7:
+		a.stepTXPowerSetting(dir)
+	}
+}
+
+func (a *App) stepTXPowerSetting(dir int) {
+	levels := config.AllowedTXPowerDBm
+	cur := len(levels) - 1
+	for i, lvl := range levels {
+		if lvl == a.Settings.TXPowerDBm {
+			cur = i
+			break
+		}
+	}
+	next := (cur + dir + len(levels)) % len(levels)
+	a.Settings.TXPowerDBm = levels[next]
+	a.ApplySettings(a.Settings)
+	a.persistSettings()
+	a.SetToast(fmt.Sprintf("TX Power: %+d dBm", a.Settings.TXPowerDBm))
 }
 
 func (a *App) adjustSquelchKSetting(delta float64) {
@@ -83,6 +108,9 @@ func (a *App) toggleSelectedSetting() {
 		return
 	case 6:
 		a.openSourcesManage()
+		return
+	case 7:
+		a.stepTXPowerSetting(1)
 		return
 	}
 	a.persistSettings()
@@ -242,6 +270,10 @@ func (a *App) buildSettingsRows() [settingsRowCount]settingsRow {
 	if a.SyncBusy {
 		syncVal, syncCol = "SYNCING", ColMagenta
 	}
+	txCol := ColCyan
+	if a.Settings.TXPowerDBm >= 10 {
+		txCol = ColAmber
+	}
 	return [settingsRowCount]settingsRow{
 		{"MCP Server (SSH)", mcpVal, mcpCol},
 		{"Auto Squelch", asqVal, asqCol},
@@ -250,6 +282,7 @@ func (a *App) buildSettingsRows() [settingsRowCount]settingsRow {
 		{"Reset ML Baseline", "ACTION", ColAmber},
 		{"Sync DB Sources", syncVal, syncCol},
 		{"Manage DB Sources", "OPEN>", ColCyan},
+		{"TX Power (PATABLE)", fmt.Sprintf("%+d dBm", a.Settings.TXPowerDBm), txCol},
 	}
 }
 

@@ -31,7 +31,7 @@ A fast, user-friendly **CC1101 Sub-GHz Thermal Waterfall, RSSI Oscilloscope, OOK
 
 ## Documentation
 
-- **Interactive Learning Portal**: [`../learning-portal/`](../learning-portal/) — full English guides for RF Heatmap, Sub-GHz & CC1101 theory, Smart Squelch ML, and interactive browser labs.
+- **Interactive Learning Portal**: [CardputerZero RF & NFC Learning Portal](https://igenexxx.github.io/cardputer-zero-learning-portal/#/home) — full English guides for [RF Heatmap](https://igenexxx.github.io/cardputer-zero-learning-portal/#/rf-guide), [Sub-GHz & CC1101 Theory](https://igenexxx.github.io/cardputer-zero-learning-portal/#/rf-domain), all 5 On-Device ML stages, and interactive browser labs.
 - **Detailed App Guide**: [`docs/GUIDE.md`](docs/GUIDE.md) — in-depth device walkthrough and reference.
 
 ## Build & Package (`.deb`)

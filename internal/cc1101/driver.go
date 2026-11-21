@@ -1,6 +1,7 @@
 package cc1101
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -10,6 +11,7 @@ import (
 type Transport interface {
 	Transfer(tx []byte) ([]byte, error)
 	SetRFSwitch(high bool) error
+	TransmitPulses(ctx context.Context, pulses []int32) error
 	Close() error
 }
 
@@ -116,10 +118,14 @@ func (r *Radio) ApplyPreset(p Preset) error {
 	if r.dataOut {
 		gdo0 = gdoAsyncSerial
 	}
-	paTable := []uint8{0x00, txPowerMax, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	if spec.MDMCFG2&0x70 == 0x00 {
-		// 2-FSK uses PATABLE[0].
-		paTable[0] = txPowerMax
+	paTable := PATableForPreset(spec)
+	fsctrl1 := spec.FSCTRL1
+	if fsctrl1 == 0 {
+		fsctrl1 = 0x06
+	}
+	agc := spec.AGC
+	if agc == (AGCConfig{}) {
+		agc = DefaultOOKAGC()
 	}
 
 	if err := r.strobe(strobeIdle); err != nil {
@@ -128,16 +134,16 @@ func (r *Radio) ApplyPreset(p Preset) error {
 	regs := [][2]uint8{
 		{regIOCFG0, gdo0},
 		{regPKTCTRL0, 0x32}, // async serial mode
-		{regFSCTRL1, 0x06},
+		{regFSCTRL1, fsctrl1},
 		{regMDMCFG4, spec.MDMCFG4},
 		{regMDMCFG3, spec.MDMCFG3},
 		{regMDMCFG2, spec.MDMCFG2},
 		{regDEVIATN, spec.DEVIATN},
 		{regMCSM0, 0x18},
 		{regFOCCFG, spec.FOCCFG},
-		{regAGCCTRL2, 0x07},
-		{regAGCCTRL1, 0x00},
-		{regAGCCTRL0, 0x91},
+		{regAGCCTRL2, agc.CTRL2},
+		{regAGCCTRL1, agc.CTRL1},
+		{regAGCCTRL0, agc.CTRL0},
 		{regFREND1, spec.FREND1},
 		{regFREND0, spec.FREND0},
 	}
@@ -146,7 +152,7 @@ func (r *Radio) ApplyPreset(p Preset) error {
 			return err
 		}
 	}
-	return r.writeBurst(regPATABLE, paTable)
+	return r.writeBurst(regPATABLE, paTable[:])
 }
 
 // SetDataOutput enables or disables GDO0 asynchronous serial output.

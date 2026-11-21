@@ -45,15 +45,56 @@ func (s *Server) savedSearchDirs() []savedDirSource {
 	return dirs
 }
 
-func (s *Server) toolListSaved() (*toolCallResult, *rpcError) {
+func (s *Server) toolListSaved(rawArgs json.RawMessage) (*toolCallResult, *rpcError) {
+	var args struct {
+		Source string `json:"source"`
+		Pack   string `json:"pack"`
+	}
+	if err := decodeArgs(rawArgs, &args); err != nil {
+		return nil, err
+	}
+	if args.Pack != "" {
+		return s.listPackEntriesJSON(args.Pack)
+	}
+	srcFilter := strings.ToLower(strings.TrimSpace(args.Source))
 	items := make([]savedItem, 0)
 	for _, src := range s.savedSearchDirs() {
+		if srcFilter == "user" && src.source != "captures" {
+			continue
+		}
+		if srcFilter == "external" && src.source == "captures" {
+			continue
+		}
 		items = append(items, scanSavedDir(src)...)
 	}
 	slices.SortFunc(items, func(a, b savedItem) int { return cmp.Compare(b.Name, a.Name) })
 	return jsonResult(map[string]any{
 		"count": len(items),
 		"files": items,
+	})
+}
+
+func (s *Server) listPackEntriesJSON(packID string) (*toolCallResult, *rpcError) {
+	entries, err := s.store.ListEntries(packID)
+	if err != nil {
+		return toolError(err.Error())
+	}
+	items := make([]savedItem, 0, len(entries))
+	for _, ref := range entries {
+		sf, err := loadRefForMCP(ref)
+		if err != nil {
+			continue
+		}
+		items = append(items, savedItem{
+			Name: ref.Name, Path: ref.Path, Source: string(ref.Source),
+			FreqHz: sf.FreqHz, Preset: sf.Preset, Protocol: sf.Protocol,
+			Bits: sf.Bit, Key: sf.Key, TE: sf.TE, RawSamples: len(sf.RawData),
+		})
+	}
+	return jsonResult(map[string]any{
+		"pack_id": packID,
+		"count":   len(items),
+		"files":   items,
 	})
 }
 

@@ -35,10 +35,11 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	want := Settings{
-		MCPEnabled:  true,
-		AutoSquelch: false,
-		AutoLock:    false,
-		SquelchK:    4.5,
+		MCPEnabled:      true,
+		AutoSquelch:     false,
+		AutoLock:        false,
+		SquelchK:        4.5,
+		ProbeIntervalMs: 1500,
 	}
 	if err := Save(path, want); err != nil {
 		t.Fatalf("Save failed: %v", err)
@@ -93,10 +94,11 @@ func TestLoadPartialJSONPreservesDefaults(t *testing.T) {
 		t.Fatalf("Load(partial) returned error: %v", err)
 	}
 	want := Settings{
-		MCPEnabled:  true,
-		AutoSquelch: true,
-		AutoLock:    true,
-		SquelchK:    DefaultSquelchK,
+		MCPEnabled:      true,
+		AutoSquelch:     true,
+		AutoLock:        true,
+		SquelchK:        DefaultSquelchK,
+		ProbeIntervalMs: DefaultProbeIntervalMs,
 	}
 	if got != want {
 		t.Fatalf("Load(partial) = %+v, want %+v", got, want)

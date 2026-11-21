@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"rf-heatmap/internal/library"
 	"rf-heatmap/internal/subfile"
 	"rf-heatmap/internal/ui"
 )
@@ -23,11 +24,15 @@ func main() {
 		panic(err)
 	}
 
-	tmpCaps, err := os.MkdirTemp("", "rfshots")
+	tmpRoot, err := os.MkdirTemp("", "rfshots")
 	if err != nil {
 		panic(err)
 	}
-	defer os.RemoveAll(tmpCaps)
+	defer os.RemoveAll(tmpRoot)
+	tmpCaps := filepath.Join(tmpRoot, "captures")
+	tmpDBs := filepath.Join(tmpRoot, "databases")
+	_ = os.MkdirAll(tmpCaps, 0o755)
+	_ = os.MkdirAll(filepath.Join(tmpDBs, "fans"), 0o755)
 
 	sample1 := &subfile.SubFile{
 		FileType: "Flipper SubGhz Key File",
@@ -61,7 +66,16 @@ func main() {
 	_ = os.WriteFile(filepath.Join(tmpCaps, "weather_868.sub"), []byte(sample2.Format()), 0o644)
 	_ = os.WriteFile(filepath.Join(tmpCaps, "barrier_came.sub"), []byte(sample3.Format()), 0o644)
 
+	// Sample external read-only database pack for PROBE screenshot.
+	_ = os.WriteFile(filepath.Join(tmpDBs, "fans", "fan_01_power.sub"), []byte(sample1.Format()), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDBs, "fans", "fan_02_low.sub"), []byte(sample1.Format()), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDBs, "fans", "fan_03_med.sub"), []byte(sample1.Format()), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDBs, "fans", "fan_04_high.sub"), []byte(sample1.Format()), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDBs, "fans", "fan_05_light.sub"), []byte(sample3.Format()), 0o644)
+
 	app := ui.NewApp(nil, tmpCaps)
+	defer app.Close()
+	app.SetLibraryStore(library.NewStore(tmpCaps, tmpDBs, nil))
 	c, err := ui.NewCanvas("")
 	if err != nil {
 		panic(err)
@@ -93,6 +107,18 @@ func main() {
 	app.ToastText = ""
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "saved.png"), *scale)
+
+	// ModeProbe: simulate paused auto-probe after 3 sent signals, rewound to #2.
+	app.HandleKey(ui.KeyTab)
+	app.Probe.OnTXStarted(0)
+	app.Probe.OnTXStarted(1)
+	app.Probe.OnTXStarted(2)
+	app.Probe.Status = library.ProbePaused
+	app.Probe.ActiveTX = false
+	app.Probe.CursorIdx = 1
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "probe.png"), *scale)
 
 	app.HandleKey(ui.KeyTab)
 	app.ToastText = ""

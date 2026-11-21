@@ -1,12 +1,17 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 
 	"rf-heatmap/internal/config"
+	"rf-heatmap/internal/dbsync"
 )
 
-const settingsRowCount = 5
+const (
+	settingsRowCount    = 7
+	settingsVisibleRows = 5
+)
 
 type settingsRow struct {
 	label string
@@ -73,8 +78,82 @@ func (a *App) toggleSelectedSetting() {
 		a.ResetMLBaselines()
 		a.SetToast("ML Baseline reset")
 		return
+	case 5:
+		a.triggerDBSync()
+		return
+	case 6:
+		a.openSourcesManage()
+		return
 	}
 	a.persistSettings()
+}
+
+func (a *App) triggerDBSync() {
+	if a.SyncBusy {
+		if a.syncCancel != nil {
+			a.syncCancel()
+		}
+		a.SetToast("Cancelling sync...")
+		return
+	}
+	sources, err := dbsync.LoadSources(a.SourcesPath)
+	if err != nil {
+		a.SetToast("Sources err!")
+		return
+	}
+	if len(sources) == 0 {
+		a.SetToast("No DB sources")
+		return
+	}
+	syncer := a.Syncer
+	if syncer == nil && a.Store != nil {
+		syncer = dbsync.NewSyncer(a.Store.DatabasesDir)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.syncCancel = cancel
+	a.SyncBusy = true
+	a.SetToast(fmt.Sprintf("Syncing %d DB(s)...", len(sources)))
+
+	go func() {
+		defer cancel()
+		reports := syncer.SyncAll(ctx, sources, nil)
+		select {
+		case a.syncDoneCh <- reports:
+		default:
+		}
+	}()
+}
+
+func (a *App) pollSyncResults() {
+	if a.syncDoneCh == nil {
+		return
+	}
+	select {
+	case reports := <-a.syncDoneCh:
+		a.SyncBusy = false
+		a.syncCancel = nil
+		a.refreshProbePacks()
+		a.SetToast(summarizeSyncReports(reports))
+	default:
+	}
+}
+
+func summarizeSyncReports(reports []dbsync.SyncReport) string {
+	var added, updated, errs int
+	for _, r := range reports {
+		added += r.Added
+		updated += r.Updated
+		if r.Err != "" || r.Failed > 0 {
+			errs++
+		}
+	}
+	if errs > 0 && added == 0 && updated == 0 {
+		return fmt.Sprintf("Sync err (%d)", errs)
+	}
+	if added == 0 && updated == 0 {
+		return "DBs up to date"
+	}
+	return fmt.Sprintf("Sync: +%d new ~%d upd", added, updated)
 }
 
 // ResetMLBaselines clears online noise baselines and live ML trackers for a fresh RF environment.
@@ -129,8 +208,13 @@ func (a *App) drawSettings(c *Canvas) {
 	c.FillRect(6, 31, 308, 90, ColPanel)
 	c.DrawRect(6, 31, 308, 90, ColBorder)
 
-	for i, row := range a.buildSettingsRows() {
-		y := 34 + i*17
+	rows := a.buildSettingsRows()
+	start := max(0, a.SettingsIdx-(settingsVisibleRows-1))
+	visible := min(settingsVisibleRows, len(rows)-start)
+	for r := range visible {
+		i := start + r
+		row := rows[i]
+		y := 34 + r*17
 		if i == a.SettingsIdx {
 			c.FillRect(8, y-1, 304, 15, ColNavActive)
 			c.DrawRect(8, y-1, 304, 15, ColCyan)
@@ -154,12 +238,18 @@ func (a *App) buildSettingsRows() [settingsRowCount]settingsRow {
 	if a.Settings.AutoLock {
 		lckVal, lckCol = "ON", ColGreen
 	}
+	syncVal, syncCol := "SYNC", ColCyan
+	if a.SyncBusy {
+		syncVal, syncCol = "SYNCING", ColMagenta
+	}
 	return [settingsRowCount]settingsRow{
 		{"MCP Server (SSH)", mcpVal, mcpCol},
 		{"Auto Squelch", asqVal, asqCol},
 		{"Auto-Lock", lckVal, lckCol},
 		{"Squelch K", fmt.Sprintf("%.1f sigma", a.Settings.SquelchK), ColCyan},
 		{"Reset ML Baseline", "ACTION", ColAmber},
+		{"Sync DB Sources", syncVal, syncCol},
+		{"Manage DB Sources", "OPEN>", ColCyan},
 	}
 }
 

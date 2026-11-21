@@ -14,6 +14,9 @@ import (
 	"time"
 
 	"rf-heatmap/internal/config"
+	"rf-heatmap/internal/dbsync"
+	"rf-heatmap/internal/library"
+	"rf-heatmap/internal/rfml"
 )
 
 const (
@@ -29,6 +32,9 @@ const (
 type Options struct {
 	Radio          RadioBackend // nil runs in simulator mode
 	CapturesDir    string
+	DatabasesDir   string   // read-only external .sub packs root (~/rf-heatmap/databases)
+	SourcesPath    string   // JSON registry of remote .sub database sources
+	Syncer         *dbsync.Syncer
 	ExtraSavedDirs []string // nil defaults to [~/subg/files]; set to []string{} to disable
 	ConfigPath     string
 	Settings       config.Settings
@@ -37,15 +43,20 @@ type Options struct {
 
 // Server implements a pure-Go JSON-RPC 2.0 MCP server over stdio.
 type Server struct {
-	radio       RadioBackend
-	capturesDir string
-	extraDirs   []string
-	configPath  string
-	settings    config.Settings
-	settleDelay time.Duration
+	radio        RadioBackend
+	capturesDir  string
+	databasesDir string
+	sourcesPath  string
+	syncer       *dbsync.Syncer
+	extraDirs    []string
+	store        *library.Store
+	configPath   string
+	settings     config.Settings
+	settleDelay  time.Duration
 
-	radioMu sync.Mutex
-	writeMu sync.Mutex
+	radioMu        sync.Mutex
+	writeMu        sync.Mutex
+	foxhuntTracker *rfml.FoxhuntTracker
 }
 
 // NewServer creates a configured MCP server instance.
@@ -60,13 +71,26 @@ func NewServer(opts Options) *Server {
 	if settle == 0 && opts.Radio != nil {
 		settle = 1200 * time.Microsecond
 	}
+	store := library.NewStore(opts.CapturesDir, opts.DatabasesDir, extra)
+	sourcesPath := opts.SourcesPath
+	if sourcesPath == "" {
+		sourcesPath = dbsync.DefaultSourcesPath()
+	}
+	syncer := opts.Syncer
+	if syncer == nil {
+		syncer = dbsync.NewSyncer(opts.DatabasesDir)
+	}
 	return &Server{
-		radio:       opts.Radio,
-		capturesDir: opts.CapturesDir,
-		extraDirs:   extra,
-		configPath:  opts.ConfigPath,
-		settings:    opts.Settings.Normalize(),
-		settleDelay: settle,
+		radio:        opts.Radio,
+		capturesDir:  opts.CapturesDir,
+		databasesDir: opts.DatabasesDir,
+		sourcesPath:  sourcesPath,
+		syncer:       syncer,
+		extraDirs:    extra,
+		store:        store,
+		configPath:   opts.ConfigPath,
+		settings:     opts.Settings.Normalize(),
+		settleDelay:  settle,
 	}
 }
 
@@ -228,7 +252,25 @@ func (s *Server) dispatchTool(name string, rawArgs json.RawMessage) (*toolCallRe
 	case "rf_foxhunt_track":
 		return s.toolFoxhuntTrack(rawArgs)
 	case "rf_list_saved":
-		return s.toolListSaved()
+		return s.toolListSaved(rawArgs)
+	case "rf_list_databases":
+		return s.toolListDatabases()
+	case "rf_promote_to_user":
+		return s.toolPromoteToUser(rawArgs)
+	case "rf_transmit_saved":
+		return s.toolTransmitSaved(rawArgs)
+	case "rf_list_sources":
+		return s.toolListSources()
+	case "rf_add_source":
+		return s.toolAddSource(rawArgs)
+	case "rf_remove_source":
+		return s.toolRemoveSource(rawArgs)
+	case "rf_sync_sources":
+		return s.toolSyncSources(rawArgs)
+	case "rf_delete_pack_files":
+		return s.toolDeletePackFiles(rawArgs)
+	case "rf_rank_probe_pack":
+		return s.toolRankProbePack(rawArgs)
 	case "rf_read_saved":
 		return s.toolReadSaved(rawArgs)
 	case "rf_save_capture":
@@ -237,6 +279,14 @@ func (s *Server) dispatchTool(name string, rawArgs json.RawMessage) (*toolCallRe
 		return s.toolDeleteSaved(rawArgs)
 	case "rf_purge_noise":
 		return s.toolPurgeNoise(rawArgs)
+	case "rf_analyze_rolling_code":
+		return s.toolAnalyzeRollingCode(rawArgs)
+	case "rf_decode_sensor":
+		return s.toolDecodeSensor(rawArgs)
+	case "rf_foxhunt_sample":
+		return s.toolFoxhuntSample(rawArgs)
+	case "rf_trim_raw":
+		return s.toolTrimRaw(rawArgs)
 	default:
 		return nil, &rpcError{Code: errCodeInvalidParams, Message: fmt.Sprintf("unknown tool: %s", name)}
 	}

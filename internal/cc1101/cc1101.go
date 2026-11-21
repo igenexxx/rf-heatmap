@@ -64,6 +64,7 @@ const (
 	PresetAM270
 	PresetFM238
 	PresetFM476
+	PresetGFSK999
 )
 
 // PresetSpec holds register values and Flipper .sub naming for a modem preset.
@@ -77,25 +78,32 @@ type PresetSpec struct {
 	FOCCFG      uint8
 	FREND1      uint8
 	FREND0      uint8
+	FSCTRL1     uint8
+	AGC         AGCConfig
 }
 
 var presets = []PresetSpec{
 	{
 		Name: "AM650", SubFileName: "FuriHalSubGhzPresetOok650Async",
 		MDMCFG4: 0x17, MDMCFG3: 0x32, MDMCFG2: 0x30, DEVIATN: 0x47, FOCCFG: 0x18, FREND1: 0xB6, FREND0: 0x11,
+		FSCTRL1: 0x06, AGC: DefaultOOKAGC(),
 	},
 	{
 		Name: "AM270", SubFileName: "FuriHalSubGhzPresetOok270Async",
 		MDMCFG4: 0x67, MDMCFG3: 0x32, MDMCFG2: 0x30, DEVIATN: 0x47, FOCCFG: 0x18, FREND1: 0xB6, FREND0: 0x11,
+		FSCTRL1: 0x06, AGC: DefaultOOKAGC(),
 	},
 	{
 		Name: "FM238", SubFileName: "FuriHalSubGhzPreset2FSKDev238Async",
 		MDMCFG4: 0x67, MDMCFG3: 0x83, MDMCFG2: 0x04, DEVIATN: 0x04, FOCCFG: 0x16, FREND1: 0x56, FREND0: 0x10,
+		FSCTRL1: 0x06, AGC: DefaultFSKAGC(),
 	},
 	{
 		Name: "FM476", SubFileName: "FuriHalSubGhzPreset2FSKDev476Async",
 		MDMCFG4: 0x67, MDMCFG3: 0x83, MDMCFG2: 0x04, DEVIATN: 0x47, FOCCFG: 0x16, FREND1: 0x56, FREND0: 0x10,
+		FSCTRL1: 0x06, AGC: DefaultFSKAGC(),
 	},
+	GFSK999PresetSpec(),
 }
 
 // GetPresetSpec returns the modem specification for a preset (defaults to AM650 if out of range).

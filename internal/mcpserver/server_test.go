@@ -71,6 +71,14 @@ func (r *stubRadio) Idle() error {
 	return nil
 }
 
+func (r *stubRadio) TransmitPulses(ctx context.Context, freqHz uint32, preset cc1101.Preset, pulses []int32) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastFreq = freqHz
+	r.preset = preset
+	return ctx.Err()
+}
+
 // fakeSPITransport exercises CC1101Backend wrapping a real *cc1101.Radio without hardware.
 type fakeSPITransport struct{}
 
@@ -85,12 +93,15 @@ func (f *fakeSPITransport) Transfer(tx []byte) ([]byte, error) {
 			rx[1] = 0x14
 		case 0x34: // RSSI raw -> -74 dBm
 			rx[1] = 0x00
+		case 0x35: // MARCSTATE -> TX
+			rx[1] = 0x13
 		}
 	}
 	return rx, nil
 }
-func (f *fakeSPITransport) SetRFSwitch(bool) error { return nil }
-func (f *fakeSPITransport) Close() error           { return nil }
+func (f *fakeSPITransport) SetRFSwitch(bool) error                       { return nil }
+func (f *fakeSPITransport) TransmitPulses(context.Context, []int32) error { return nil }
+func (f *fakeSPITransport) Close() error                                 { return nil }
 
 func TestCC1101BackendAdapter(t *testing.T) {
 	if got := NewCC1101Backend(nil); got != nil {
@@ -218,25 +229,38 @@ func TestJSONRPCProtocolHandshakeAndErrors(t *testing.T) {
 	if _, ok := resps[2]["result"].(map[string]any); !ok {
 		t.Fatalf("ping result missing: %+v", resps[2])
 	}
-	// 3: tools/list has all 13 tools
+	// 3: tools/list has all 26 tools
 	tools := resps[3]["result"].(map[string]any)["tools"].([]any)
-	if len(tools) != 13 {
-		t.Fatalf("tools/list count = %d, want 13", len(tools))
+	if len(tools) != 26 {
+		t.Fatalf("tools/list count = %d, want 26", len(tools))
 	}
 	wantTools := map[string]bool{
-		"rf_get_status":        false,
-		"rf_sweep_band":        false,
-		"rf_read_rssi":         false,
-		"rf_decode_ook":        false,
-		"rf_analyze_pulses":    false,
-		"rf_classify_signal":   false,
-		"rf_match_fingerprint": false,
-		"rf_foxhunt_track":     false,
-		"rf_list_saved":        false,
-		"rf_purge_noise":       false,
-		"rf_read_saved":        false,
-		"rf_save_capture":      false,
-		"rf_delete_saved":      false,
+		"rf_get_status":           false,
+		"rf_sweep_band":           false,
+		"rf_read_rssi":            false,
+		"rf_decode_ook":           false,
+		"rf_analyze_pulses":       false,
+		"rf_classify_signal":      false,
+		"rf_match_fingerprint":    false,
+		"rf_foxhunt_track":        false,
+		"rf_list_databases":       false,
+		"rf_promote_to_user":      false,
+		"rf_transmit_saved":       false,
+		"rf_list_sources":         false,
+		"rf_add_source":           false,
+		"rf_remove_source":        false,
+		"rf_sync_sources":         false,
+		"rf_delete_pack_files":    false,
+		"rf_rank_probe_pack":      false,
+		"rf_list_saved":           false,
+		"rf_purge_noise":          false,
+		"rf_read_saved":           false,
+		"rf_save_capture":         false,
+		"rf_delete_saved":         false,
+		"rf_analyze_rolling_code": false,
+		"rf_decode_sensor":        false,
+		"rf_foxhunt_sample":       false,
+		"rf_trim_raw":             false,
 	}
 	for _, rawT := range tools {
 		tm := rawT.(map[string]any)

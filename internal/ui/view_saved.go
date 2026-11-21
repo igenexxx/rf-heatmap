@@ -1,15 +1,14 @@
 package ui
 
 import (
-	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
 	"rf-heatmap/internal/cc1101"
+	"rf-heatmap/internal/library"
 	"rf-heatmap/internal/rfml"
 	"rf-heatmap/internal/subfile"
 )
@@ -28,7 +27,14 @@ func (a *App) handleSavedKey(act KeyAction) {
 		if len(a.SavedFiles) > 0 {
 			entry := a.SavedFiles[a.SavedIdx]
 			a.ActiveFreq = entry.File.FreqHz
-			a.SetToast("TX: " + entry.Name)
+			ref := library.EntryRef{
+				Name:   entry.Name,
+				Path:   entry.Path,
+				PackID: library.PackIDUser,
+				Source: library.SourceUser,
+				File:   entry.File,
+			}
+			a.submitTX(ref, entry.File, -1, false)
 		}
 	case KeyNav5:
 		if len(a.SavedFiles) > 0 {
@@ -40,16 +46,74 @@ func (a *App) handleSavedKey(act KeyAction) {
 			a.Mode = ModePulse
 			a.SetToast("Loaded " + entry.Name)
 		}
+	case KeySpace, KeyMark:
+		a.toggleSavedMark()
 	case KeyNav6, KeyDelete:
-		if len(a.SavedFiles) > 0 {
-			entry := a.SavedFiles[a.SavedIdx]
-			_ = os.Remove(entry.Path)
-			a.refreshSavedFiles()
-			a.SetToast("Deleted " + entry.Name)
-		}
+		a.handleSavedDelete()
 	case KeyNav7:
 		a.handlePurgeNoiseKey()
+	case KeyTrim:
+		a.EnterTrimmerFromSaved()
 	}
+}
+
+func (a *App) toggleSavedMark() {
+	if len(a.SavedFiles) == 0 {
+		return
+	}
+	if a.SavedSelected == nil {
+		a.SavedSelected = make(map[string]bool)
+	}
+	name := a.SavedFiles[a.SavedIdx].Name
+	if a.SavedSelected[name] {
+		delete(a.SavedSelected, name)
+	} else {
+		a.SavedSelected[name] = true
+	}
+	a.savedDelUntil = time.Time{}
+}
+
+func (a *App) handleSavedDelete() {
+	if len(a.SavedFiles) == 0 || a.Store == nil {
+		return
+	}
+	targets := a.selectedSavedEntries()
+	if len(targets) > 1 && time.Now().After(a.savedDelUntil) {
+		a.savedDelUntil = time.Now().Add(3 * time.Second)
+		a.SetToast(fmt.Sprintf("Del %d files? DEL again", len(targets)))
+		return
+	}
+	a.savedDelUntil = time.Time{}
+	removed := 0
+	for _, entry := range targets {
+		ref := library.EntryRef{Name: entry.Name, Path: entry.Path, PackID: library.PackIDUser, Source: library.SourceUser}
+		if a.Store.DeleteUserEntry(ref) == nil {
+			removed++
+			delete(a.SavedSelected, entry.Name)
+		}
+	}
+	a.refreshSavedFiles()
+	if len(targets) == 1 && removed == 1 {
+		a.SetToast("Deleted " + targets[0].Name)
+		return
+	}
+	a.SetToast(fmt.Sprintf("Deleted %d file(s)", removed))
+}
+
+func (a *App) selectedSavedEntries() []SavedEntry {
+	if len(a.SavedSelected) == 0 {
+		return []SavedEntry{a.SavedFiles[a.SavedIdx]}
+	}
+	var out []SavedEntry
+	for _, e := range a.SavedFiles {
+		if a.SavedSelected[e.Name] {
+			out = append(out, e)
+		}
+	}
+	if len(out) == 0 {
+		return []SavedEntry{a.SavedFiles[a.SavedIdx]}
+	}
+	return out
 }
 
 func (a *App) handlePurgeNoiseKey() {
@@ -159,30 +223,11 @@ func (a *App) saveDecodedKey() {
 
 func (a *App) refreshSavedFiles() {
 	a.SavedFiles = nil
-	dirs := []string{a.CapturesDir}
-	if home, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(home, "subg", "files"))
-	}
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".sub") {
-				continue
-			}
-			full := filepath.Join(dir, e.Name())
-			raw, err := os.ReadFile(full)
-			if err != nil {
-				continue
-			}
-			if sf, err := subfile.Parse(string(raw)); err == nil {
-				a.SavedFiles = append(a.SavedFiles, SavedEntry{Name: e.Name(), Path: full, File: sf})
-			}
+	if a.Store != nil {
+		for _, ref := range a.Store.ListUserEntries() {
+			a.SavedFiles = append(a.SavedFiles, SavedEntry{Name: ref.Name, Path: ref.Path, File: ref.File})
 		}
 	}
-	slices.SortFunc(a.SavedFiles, func(x, y SavedEntry) int { return cmp.Compare(y.Name, x.Name) })
 	if a.SavedIdx >= len(a.SavedFiles) {
 		a.SavedIdx = max(0, len(a.SavedFiles)-1)
 	}
@@ -210,7 +255,11 @@ func (a *App) rebuildFingerprintIndex() {
 }
 
 func (a *App) drawSaved(c *Canvas) {
-	c.DrawText(6, 21, fmt.Sprintf("Saved .sub Library (%d)", len(a.SavedFiles)), ColCyan, 1)
+	title := fmt.Sprintf("User .sub Library (%d)", len(a.SavedFiles))
+	if len(a.SavedSelected) > 0 {
+		title = fmt.Sprintf("User .sub Library (%d, %d sel)", len(a.SavedFiles), len(a.SavedSelected))
+	}
+	c.DrawText(6, 21, title, ColCyan, 1)
 	c.FillRect(6, 32, 308, 108, ColPanel)
 	c.DrawRect(6, 32, 308, 108, ColBorder)
 
@@ -234,7 +283,11 @@ func (a *App) drawSaved(c *Canvas) {
 		if proto == "" {
 			proto = "RAW"
 		}
-		label := fmt.Sprintf("%-18s %.2fM %s", truncate(entry.Name, 18), float64(entry.File.FreqHz)/1e6, proto)
-		c.DrawText(12, y+3, label, ColText, 1)
+		mark := " "
+		if a.SavedSelected[entry.Name] {
+			mark = "x"
+		}
+		label := fmt.Sprintf("[%s] %-16s %.2fM %s", mark, truncate(entry.Name, 16), float64(entry.File.FreqHz)/1e6, proto)
+		c.DrawText(10, y+3, label, ColText, 1)
 	}
 }

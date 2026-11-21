@@ -45,6 +45,10 @@ func (a *App) handlePulseKey(act KeyAction) {
 		a.saveCurrentRaw()
 	case KeyNav7:
 		a.cyclePreset()
+	case KeyFoxhunt:
+		a.EnterFoxhunt(ModePulse)
+	case KeyTrim:
+		a.EnterTrimmerFromPulse()
 	}
 }
 
@@ -85,6 +89,12 @@ func (a *App) analyzeCapturedRaw() {
 	a.LastPrediction, _, a.LastCluster = rfml.ClassifyPulses(a.CapturedRaw, a.ActiveFreq, snr)
 	a.HasPrediction = len(a.CapturedRaw) > 0
 	if k, ok := subfile.DecodeOOK(a.CapturedRaw); ok {
+		if a.RollingDetector != nil {
+			if rep := a.RollingDetector.Observe(a.ActiveFreq, a.CapturedRaw); rep.IsRolling {
+				a.LastRolling = rep
+				k.IsRolling = true
+			}
+		}
 		a.LastDecoded = &k
 	}
 	a.HasMatch = false

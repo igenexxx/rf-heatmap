@@ -12,6 +12,8 @@ import (
 
 	"rf-heatmap/internal/cc1101"
 	"rf-heatmap/internal/config"
+	"rf-heatmap/internal/dbsync"
+	"rf-heatmap/internal/library"
 	"rf-heatmap/internal/mcpserver"
 	"rf-heatmap/internal/rfml"
 	"rf-heatmap/internal/ui"
@@ -28,16 +30,19 @@ const (
 
 // Config holds runtime parameters for rf-heatmap.
 type Config struct {
-	SimMode     bool
-	ProbeOnly   bool
-	ProbeBand   int
-	ProbeSweeps int
-	MCPMode     bool
-	ConfigPath  string
-	FBPath      string
-	SPIPath     string
-	CapturesDir string
-	Stdin       io.Reader // defaults to os.Stdin when nil
+	SimMode      bool
+	ProbeOnly    bool
+	ProbeBand    int
+	ProbeSweeps  int
+	MCPMode      bool
+	SyncOnly     bool
+	ConfigPath   string
+	SourcesPath  string
+	FBPath       string
+	SPIPath      string
+	CapturesDir  string
+	DatabasesDir string
+	Stdin        io.Reader // defaults to os.Stdin when nil
 }
 
 // DefaultCapturesDir returns the default directory for saved .sub captures.
@@ -49,15 +54,47 @@ func DefaultCapturesDir() string {
 	return filepath.Join(home, "rf-heatmap", "captures")
 }
 
-// Run executes the MCP server, the CC1101 hardware probe, or the interactive UI loop.
+// Run executes the MCP server, DB sync, CC1101 hardware probe, or interactive UI loop.
 func Run(ctx context.Context, cfg Config, stdout, stderr io.Writer) error {
 	if cfg.MCPMode {
 		return runMCP(ctx, cfg, stdout, stderr)
+	}
+	if cfg.SyncOnly {
+		return runSync(ctx, cfg, stdout)
 	}
 	if cfg.ProbeOnly {
 		return runProbe(cfg.SPIPath, cfg.ProbeBand, cfg.ProbeSweeps, stdout)
 	}
 	return runUI(ctx, cfg, stderr)
+}
+
+func runSync(ctx context.Context, cfg Config, out io.Writer) error {
+	sources, err := dbsync.LoadSources(cfg.SourcesPath)
+	if err != nil {
+		return err
+	}
+	if len(sources) == 0 {
+		fmt.Fprintln(out, "rf-heatmap: no remote DB sources configured")
+		return nil
+	}
+	dbDir := cfg.DatabasesDir
+	if dbDir == "" {
+		dbDir = library.DefaultDatabasesDir()
+	}
+	reports := dbsync.NewSyncer(dbDir).SyncAll(ctx, sources, nil)
+	for _, r := range reports {
+		if r.Err != "" {
+			fmt.Fprintf(out, "source %-14s ERROR: %s\n", r.SourceID, r.Err)
+			continue
+		}
+		if r.NotModified {
+			fmt.Fprintf(out, "source %-14s UP-TO-DATE (304, skipped=%d)\n", r.SourceID, r.Skipped)
+			continue
+		}
+		fmt.Fprintf(out, "source %-14s added=%d updated=%d skipped=%d pruned=%d failed=%d\n",
+			r.SourceID, r.Added, r.Updated, r.Skipped, r.Pruned, r.Failed)
+	}
+	return nil
 }
 
 func openOptionalRadio(simMode bool, spiPath string, stderr io.Writer, label string) (*cc1101.Radio, error) {
@@ -101,15 +138,21 @@ func runMCP(ctx context.Context, cfg Config, stdout, stderr io.Writer) error {
 	if capturesDir == "" {
 		capturesDir = DefaultCapturesDir()
 	}
+	databasesDir := cfg.DatabasesDir
+	if databasesDir == "" {
+		databasesDir = library.DefaultDatabasesDir()
+	}
 	in := cfg.Stdin
 	if in == nil {
 		in = os.Stdin
 	}
 	srv := mcpserver.NewServer(mcpserver.Options{
-		Radio:       backend,
-		CapturesDir: capturesDir,
-		ConfigPath:  cfgPath,
-		Settings:    settings,
+		Radio:        backend,
+		CapturesDir:  capturesDir,
+		DatabasesDir: databasesDir,
+		SourcesPath:  cfg.SourcesPath,
+		ConfigPath:   cfgPath,
+		Settings:     settings,
 	})
 	return srv.ServeStdio(ctx, in, stdout)
 }
@@ -234,7 +277,18 @@ func runUI(ctx context.Context, cfg Config, stderr io.Writer) error {
 	}
 
 	app := ui.NewApp(radio, cfg.CapturesDir)
+	defer app.Close()
+	if cfg.DatabasesDir != "" {
+		var extraDirs []string
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			extraDirs = []string{filepath.Join(home, "subg", "files")}
+		}
+		app.SetLibraryStore(library.NewStore(cfg.CapturesDir, cfg.DatabasesDir, extraDirs))
+	}
 	app.SetConfigPath(cfgPath)
+	if cfg.SourcesPath != "" {
+		app.SetSourcesPath(cfg.SourcesPath)
+	}
 	app.ApplySettings(settings)
 	setStartupToast(app, radio, hwErr)
 

@@ -1,6 +1,7 @@
 package cc1101
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -115,6 +116,13 @@ func (m *mockTransport) Transfer(tx []byte) ([]byte, error) {
 
 func (m *mockTransport) SetRFSwitch(high bool) error {
 	m.rfSwitch = high
+	return m.failErr
+}
+
+func (m *mockTransport) TransmitPulses(ctx context.Context, pulses []int32) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return m.failErr
 }
 

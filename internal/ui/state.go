@@ -1,12 +1,16 @@
 package ui
 
 import (
+	"context"
 	"math"
 	"time"
 
 	"rf-heatmap/internal/cc1101"
 	"rf-heatmap/internal/config"
+	"rf-heatmap/internal/dbsync"
+	"rf-heatmap/internal/library"
 	"rf-heatmap/internal/rfml"
+	"rf-heatmap/internal/sensors"
 	"rf-heatmap/internal/subfile"
 )
 
@@ -14,7 +18,7 @@ const (
 	waterfallRows        = 56
 	maxCols              = 36
 	rssiHistoryLen       = 64
-	modeCount            = 5
+	modeCount            = 6
 	defaultFreqHz        = 433_920_000
 	defaultCursorCol     = 18
 	defaultSquelchDBm    = -78
@@ -34,6 +38,7 @@ const (
 	ModePulse
 	ModeDecode
 	ModeSaved
+	ModeProbe
 	ModeSettings
 )
 
@@ -47,6 +52,8 @@ func (m Mode) String() string {
 		return "DECODE"
 	case ModeSaved:
 		return "SAVED"
+	case ModeProbe:
+		return "PROBE"
 	case ModeSettings:
 		return "SET"
 	default:
@@ -117,7 +124,7 @@ type HeatmapState struct {
 	PeakDBm    int32
 }
 
-// PulseState holds live RSSI oscilloscope history, RAW capture buffer, and decoded OOK keys.
+// PulseState holds live RSSI oscilloscope history, RAW capture buffer, GDO0 RX worker, and decoded OOK keys.
 type PulseState struct {
 	LiveRSSI     int32
 	RSSIHistory  [rssiHistoryLen]int32
@@ -126,6 +133,10 @@ type PulseState struct {
 	CapturedRaw  []int32
 	LastDecoded  *subfile.DecodedKey
 	DecodedLog   []subfile.DecodedKey
+	rxPulseCh    chan int32
+	rxCancel     context.CancelFunc
+	rxDone       chan struct{}
+	rxActive     bool
 }
 
 // MLState holds on-device RF ML baselines, anomaly/cluster/MLP/fingerprint/foxhunt state.
@@ -150,19 +161,59 @@ type MLState struct {
 	manualCursorCooldown int
 }
 
-// SavedState holds the .sub capture library directory and list selection.
+// SavedState holds the User Library (.sub captures) directory, list selection, and multi-select state.
 type SavedState struct {
 	CapturesDir       string
 	SavedFiles        []SavedEntry
 	SavedIdx          int
+	SavedSelected     map[string]bool
+	savedDelUntil     time.Time
 	purgeConfirmUntil time.Time
 }
 
-// SettingsState holds persisted opt-in settings and SET tab cursor.
+// ProbeState holds separated library storage, Auto-Probe session, multi-select, and async TX worker.
+type ProbeState struct {
+	Store         *library.Store
+	TX            *library.TXWorker
+	Probe         *library.ProbeSession
+	Packs         []library.PackInfo
+	PackIdx       int
+	ProbeSelected map[string]bool
+	probeDelUntil time.Time
+	TXBusy        bool
+	TXLabel       string
+}
+
+// ManagedSourceRow represents a remote source and/or local pack folder in the Manage DB Sources sub-view.
+type ManagedSourceRow struct {
+	ID         string
+	HasSource  bool
+	Enabled    bool
+	HasDir     bool
+	FileCount  int
+	SourceType dbsync.SourceType
+}
+
+// SourcesManageState holds the Manage DB Sources sub-view state under SET.
+type SourcesManageState struct {
+	ShowSources    bool
+	SourceRows     []ManagedSourceRow
+	SourceIdx      int
+	SourceSelected map[string]bool
+	sourceDelMode  int // 1 = dir only, 2 = source + dir
+	sourceDelUntil time.Time
+}
+
+// SettingsState holds persisted opt-in settings, remote DB sync state, and SET tab cursor.
 type SettingsState struct {
 	ConfigPath  string
+	SourcesPath string
 	Settings    config.Settings
 	SettingsIdx int
+	Syncer      *dbsync.Syncer
+	SyncBusy    bool
+	syncCancel  context.CancelFunc
+	syncDoneCh  chan []dbsync.SyncReport
 }
 
 // ChromeState holds active screen mode, pause/help overlays, toast notification, and tick counter.
@@ -174,4 +225,53 @@ type ChromeState struct {
 	ToastText  string
 	ToastUntil time.Time
 	tick       uint64
+}
+
+// RollingState holds active rolling-code detection state and replay-guard confirmation timer.
+type RollingState struct {
+	RollingDetector *subfile.RollingDetector
+	LastRolling     subfile.RollingReport
+	rollingTxUntil  time.Time
+}
+
+// SensorState holds the TPMS & Weather Station SENSORS sub-view state.
+type SensorState struct {
+	ShowSensors   bool
+	SensorProfile int // 0=TPMS 433 GFSK99, 1=TPMS 315 GFSK99, 2=Weather 433 AM650
+	ImperialUnits bool
+	SensorEntries []sensors.Reading
+	SensorIdx     int
+	prevPreset    cc1101.Preset
+	prevFreqHz    uint32
+}
+
+// GeigerClicker is a consumer-owned optional audio/tactile feedback hook for Foxhunt mode.
+type GeigerClicker interface {
+	Click(freqHz int, durMs int)
+}
+
+// FoxhuntViewState holds the full-screen Foxhunt/Geiger RSSI mode state.
+type FoxhuntViewState struct {
+	ShowFoxhunt    bool
+	Tracker        *rfml.FoxhuntTracker
+	LastFoxSample  rfml.FoxhuntSample
+	GeigerFlashOn  bool
+	GeigerMuted    bool
+	nextGeigerTick time.Time
+	Clicker        GeigerClicker
+	foxReturnMode  Mode
+}
+
+// TrimmerState holds the on-device RAW Trimmer & Repeater sub-view state.
+type TrimmerState struct {
+	ShowTrimmer   bool
+	SourceName    string
+	SourceFreq    uint32
+	SourcePreset  string
+	RawSource     []int32
+	StartIdx      int
+	EndIdx        int
+	EditEnd       bool // false = moving StartIdx, true = moving EndIdx
+	Repeats       int  // 1..10
+	trimReturnMod Mode
 }

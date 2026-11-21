@@ -45,7 +45,16 @@ func (a *App) drawHeader(c *Canvas) {
 
 	c.FillRect(4, 3, 48, 11, ColCyan)
 	c.DrawText(7, 5, "RF-HEAT", ColBg, 1)
-	drawStatusPill(c, 56, 48, a.Mode.String(), ColCyan)
+	modeLabel := a.Mode.String()
+	switch {
+	case a.ShowFoxhunt:
+		modeLabel = "FOXHUNT"
+	case a.ShowTrimmer:
+		modeLabel = "TRIM"
+	case a.ShowSensors:
+		modeLabel = "SENSOR"
+	}
+	drawStatusPill(c, 56, 48, modeLabel, ColCyan)
 
 	freqStr := fmt.Sprintf("%.2fM %s", float64(a.ActiveFreq)/1e6, cc1101.GetPresetSpec(a.Preset).Name)
 	c.DrawText(110, 5, freqStr, ColText, 1)
@@ -101,12 +110,12 @@ type helpPageContent struct {
 
 var helpPages = []helpPageContent{
 	{
-		Title: "1/4 CONTROLS & STATUS",
+		Title: "1/5 CONTROLS & STATUS",
 		Lines: []string{
 			"4..8   : Bottom bar quick actions",
-			"Tab/8  : Switch mode (5 tabs +SET)",
-			"F / X  : Up / Down (Band/Squelch/SET)",
-			"Z / C  : Left / Right (Cursor/Freq)",
+			"Tab/8  : Switch mode (6 tabs +SET)",
+			"F / X  : Up / Down (Band/Squelch/List)",
+			"Z / C  : Left / Right (Cursor/Intvl)",
 			"B / M  : Cycle ISM Band / Modulation",
 			"S / L  : Toggle Auto Squelch / Lock",
 			"Enter  : Lock Peak / Toggle / TX",
@@ -114,7 +123,7 @@ var helpPages = []helpPageContent{
 		},
 	},
 	{
-		Title: "2/4 HEATMAP & WATERFALL",
+		Title: "2/5 HEATMAP & WATERFALL",
 		Lines: []string{
 			"Top chart: Live RSSI bars per ch.",
 			"Amber ticks: Peak-Hold max signal.",
@@ -127,7 +136,7 @@ var helpPages = []helpPageContent{
 		},
 	},
 	{
-		Title: "3/4 PULSE, SQUELCH & MOD",
+		Title: "3/5 PULSE, SQUELCH & MOD",
 		Lines: []string{
 			"SQ (Amber line): Noise gate in dBm.",
 			" Green bars = signal above squelch.",
@@ -140,16 +149,29 @@ var helpPages = []helpPageContent{
 		},
 	},
 	{
-		Title: "4/4 DECODE, SAVED & SET",
+		Title: "4/5 AUTO-PROBE & GENERATORS",
 		Lines: []string{
-			"DECODE listens for OOK fixed codes:",
-			" Princeton, CAME, Linear protocols.",
-			"SAVED lists .sub files from:",
-			" ~/rf-heatmap/captures & ~/subg/files",
-			" 4(TX) 5(LOAD) 6(DEL) 7(PURGE)",
-			"SET: Opt-in MCP, ML & Reset Baseline",
-			" Enable MCP to run over SSH stdio:",
-			" ssh <dev> rf-heatmap --mcp",
+			"PROBE steps through DB packs, USER, or",
+			" built-in GEN:CAME-12 / GEN:Linear-10.",
+			"Z/C: interval 0.05s..5.0s (B/M=freq).",
+			"4(AUTO/STOP) Space/Enter: instant halt",
+			"F/X: step up past reaction delay",
+			" > = last sent, * = last 12 sent",
+			"5(TRY)/Enter: single test highlighted",
+			"6(SAVE): copy winner to USER library",
+		},
+	},
+	{
+		Title: "5/5 DECODE, SENSORS, FOX & TRIM",
+		Lines: []string{
+			"DECODE: OOK + KeeLoq/Somfy ROLLING",
+			" badge & 2-step TX guard. R=SENSORS",
+			"SENSORS: TPMS (GFSK99) & Weather",
+			" (Oregon/Acurite/LaCrosse), 5=UNIT.",
+			"G (HEATMAP/PULSE): Fullscreen FOXHUNT",
+			" Geiger RSSI + peak-hold (Esc=back).",
+			"T (PULSE/SAVED): RAW Trimmer (1..10x)",
+			" atomic save to USER captures only.",
 		},
 	},
 }

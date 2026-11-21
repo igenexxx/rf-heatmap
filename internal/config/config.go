@@ -16,24 +16,33 @@ const (
 	MaxSquelchK = 6.0
 	// DefaultSquelchK is the default Smart Squelch sigma multiplier.
 	DefaultSquelchK = 3.5
+
+	// MinProbeIntervalMs is the shortest Auto-Probe delay between transmissions.
+	MinProbeIntervalMs = 50
+	// MaxProbeIntervalMs is the longest Auto-Probe delay between transmissions.
+	MaxProbeIntervalMs = 5000
+	// DefaultProbeIntervalMs is the default Auto-Probe delay between transmissions.
+	DefaultProbeIntervalMs = 1000
 )
 
 // Settings holds persisted user preferences for rf-heatmap.
 // Opt-in services such as the MCP server are disabled by default.
 type Settings struct {
-	MCPEnabled  bool    `json:"mcp_enabled"`
-	AutoSquelch bool    `json:"auto_squelch"`
-	AutoLock    bool    `json:"auto_lock"`
-	SquelchK    float64 `json:"squelch_k"`
+	MCPEnabled      bool    `json:"mcp_enabled"`
+	AutoSquelch     bool    `json:"auto_squelch"`
+	AutoLock        bool    `json:"auto_lock"`
+	SquelchK        float64 `json:"squelch_k"`
+	ProbeIntervalMs int     `json:"probe_interval_ms"`
 }
 
 // DefaultSettings returns the safe default application settings.
 func DefaultSettings() Settings {
 	return Settings{
-		MCPEnabled:  false,
-		AutoSquelch: true,
-		AutoLock:    true,
-		SquelchK:    DefaultSquelchK,
+		MCPEnabled:      false,
+		AutoSquelch:     true,
+		AutoLock:        true,
+		SquelchK:        DefaultSquelchK,
+		ProbeIntervalMs: DefaultProbeIntervalMs,
 	}
 }
 
@@ -47,6 +56,13 @@ func (s Settings) Normalize() Settings {
 	}
 	if s.SquelchK > MaxSquelchK {
 		s.SquelchK = MaxSquelchK
+	}
+	if s.ProbeIntervalMs <= 0 {
+		s.ProbeIntervalMs = DefaultProbeIntervalMs
+	} else if s.ProbeIntervalMs < MinProbeIntervalMs {
+		s.ProbeIntervalMs = MinProbeIntervalMs
+	} else if s.ProbeIntervalMs > MaxProbeIntervalMs {
+		s.ProbeIntervalMs = MaxProbeIntervalMs
 	}
 	return s
 }

@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ type RadioBackend interface {
 	ApplyPreset(p cc1101.Preset) error
 	StartReceive(freqHz uint32) error
 	ReadRSSIDBm() (int32, error)
+	TransmitPulses(ctx context.Context, freqHz uint32, preset cc1101.Preset, pulses []int32) error
 	Idle() error
 }
 
@@ -58,6 +60,12 @@ func (b *CC1101Backend) ReadRSSIDBm() (int32, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.radio.ReadRSSIDBm()
+}
+
+func (b *CC1101Backend) TransmitPulses(ctx context.Context, freqHz uint32, preset cc1101.Preset, pulses []int32) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.radio.TransmitPulses(ctx, freqHz, preset, pulses)
 }
 
 func (b *CC1101Backend) Idle() error {

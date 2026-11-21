@@ -29,8 +29,12 @@ const (
 	KeyMod
 	KeyHelp
 	KeyDelete
+	KeyMark
+	KeyRank
 	KeyAutoSquelch
 	KeyAutoLock
+	KeyFoxhunt
+	KeyTrim
 )
 
 // Linux input_event (64-bit arm64): tv_sec(8), tv_usec(8), type(2), code(2), value(4) = 24 bytes.
@@ -49,10 +53,12 @@ const (
 	codeTab        uint16 = 15
 	codeQ          uint16 = 16
 	codeR          uint16 = 19
+	codeT          uint16 = 20
 	codeEnter      uint16 = 28
 	codeS          uint16 = 31
 	codeD          uint16 = 32
 	codeF          uint16 = 33
+	codeG          uint16 = 34
 	codeH          uint16 = 35
 	codeL          uint16 = 38
 	codeZ          uint16 = 44
@@ -94,6 +100,11 @@ var linuxKeyMap = map[uint16]KeyAction{
 	codeL:         KeyAutoLock,
 	codeDelete:    KeyDelete,
 	codeBackspace: KeyDelete,
+	code1:         KeyMark,
+	codeD:         KeyMark,
+	codeR:         KeyRank,
+	codeG:         KeyFoxhunt,
+	codeT:         KeyTrim,
 }
 
 // MapLinuxKeyCode converts a Linux evdev keycode into a KeyAction.

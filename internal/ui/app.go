@@ -2,11 +2,16 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"rf-heatmap/internal/cc1101"
 	"rf-heatmap/internal/config"
+	"rf-heatmap/internal/dbsync"
+	"rf-heatmap/internal/library"
 	"rf-heatmap/internal/rfml"
+	"rf-heatmap/internal/subfile"
 )
 
 // App coordinates all UI views, embedded domain state sub-structs, and radio interaction.
@@ -16,13 +21,31 @@ type App struct {
 	PulseState
 	MLState
 	SavedState
+	ProbeState
+	SourcesManageState
 	SettingsState
 	ChromeState
+	RollingState
+	SensorState
+	FoxhuntViewState
+	TrimmerState
 }
 
 // NewApp initializes the application state.
 func NewApp(radio *cc1101.Radio, capturesDir string) *App {
 	def := config.DefaultSettings()
+	var tx library.Transmitter
+	if radio != nil {
+		tx = library.NewRadioTransmitter(radio)
+	} else {
+		tx = &library.SimTransmitter{}
+	}
+	var extraDirs []string
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		extraDirs = []string{filepath.Join(home, "subg", "files")}
+	}
+	store := library.NewStore(capturesDir, library.DefaultDatabasesDir(), extraDirs)
+
 	a := &App{
 		RadioState: RadioState{
 			Radio:      radio,
@@ -51,16 +74,62 @@ func NewApp(radio *cc1101.Radio, capturesDir string) *App {
 		SavedState: SavedState{
 			CapturesDir: capturesDir,
 		},
+		ProbeState: ProbeState{
+			Store: store,
+			TX:    library.NewTXWorker(tx),
+			Probe: library.NewProbeSession(def.ProbeIntervalMs),
+		},
 		SettingsState: SettingsState{
-			Settings: def,
+			SourcesPath: dbsync.DefaultSourcesPath(),
+			Settings:    def,
+			Syncer:      dbsync.NewSyncer(store.DatabasesDir),
+			syncDoneCh:  make(chan []dbsync.SyncReport, 1),
 		},
 		ChromeState: ChromeState{
 			Mode: ModeHeatmap,
 		},
+		RollingState: RollingState{
+			RollingDetector: subfile.NewRollingDetector(),
+		},
+		FoxhuntViewState: FoxhuntViewState{
+			Tracker: rfml.NewFoxhuntTracker(rfml.DefaultKalmanQ, rfml.DefaultKalmanR),
+		},
 	}
 	a.initBuffers()
 	a.refreshSavedFiles()
+	a.refreshProbePacks()
 	return a
+}
+
+// Close stops background TX, GDO0 RX capture, and DB sync workers cleanly.
+func (a *App) Close() {
+	a.stopRXCapture()
+	if a.syncCancel != nil {
+		a.syncCancel()
+		a.syncCancel = nil
+	}
+	if a.TX != nil {
+		a.TX.Close()
+	}
+}
+
+// SetLibraryStore replaces the Store (e.g. for custom databases dir or isolated tests).
+func (a *App) SetLibraryStore(store *library.Store) {
+	if store == nil {
+		return
+	}
+	a.Store = store
+	a.CapturesDir = store.UserDir
+	a.Syncer = dbsync.NewSyncer(store.DatabasesDir)
+	a.Packs = nil
+	a.PackIdx = 0
+	a.refreshSavedFiles()
+	a.refreshProbePacks()
+}
+
+// SetSourcesPath sets the JSON path used to load remote DB sync sources.
+func (a *App) SetSourcesPath(path string) {
+	a.SourcesPath = path
 }
 
 func (a *App) initBuffers() {
@@ -95,6 +164,9 @@ func (a *App) ApplySettings(s config.Settings) {
 	if a.LiveBaseline != nil {
 		a.LiveBaseline.SetSquelchK(s.SquelchK)
 	}
+	if a.Probe != nil {
+		a.Probe.SetIntervalMs(s.ProbeIntervalMs)
+	}
 }
 
 // SetToast displays a brief status message.
@@ -123,6 +195,22 @@ func (a *App) HandleKey(act KeyAction) bool {
 		a.handleHelpKey(act)
 		return false
 	}
+	if a.ShowSources {
+		a.handleSourcesManageKey(act)
+		return false
+	}
+	if a.ShowFoxhunt {
+		a.handleFoxhuntKey(act)
+		return false
+	}
+	if a.ShowTrimmer {
+		a.handleTrimmerKey(act)
+		return false
+	}
+	if a.ShowSensors {
+		a.handleSensorsKey(act)
+		return false
+	}
 	if a.handleGlobalKey(act) {
 		return true
 	}
@@ -145,16 +233,28 @@ func (a *App) handleHelpKey(act KeyAction) {
 func (a *App) handleGlobalKey(act KeyAction) bool {
 	switch act {
 	case KeyQuit:
+		a.stopActiveProbe()
 		return true
 	case KeyTab, KeyNav8:
+		if a.Mode == ModeProbe {
+			a.stopActiveProbe()
+		}
 		a.Mode = (a.Mode + 1) % modeCount
 		if a.Mode == ModeSaved {
 			a.refreshSavedFiles()
+		} else if a.Mode == ModeProbe {
+			a.refreshProbePacks()
 		}
 	case KeyBand:
+		if a.Mode == ModeProbe && a.cycleProbeGenFreq() {
+			return false
+		}
 		a.cycleBand()
 	case KeyMod:
 		a.cyclePreset()
+		if a.Mode == ModeProbe {
+			a.syncProbeGenPreset()
+		}
 	case KeyAutoSquelch:
 		a.toggleAutoSquelch()
 	case KeyAutoLock:
@@ -193,6 +293,8 @@ func (a *App) dispatchModeKey(act KeyAction) {
 		a.handleDecodeKey(act)
 	case ModeSaved:
 		a.handleSavedKey(act)
+	case ModeProbe:
+		a.handleProbeKey(act)
 	case ModeSettings:
 		a.handleSettingsKey(act)
 	}
@@ -229,7 +331,19 @@ func (a *App) cyclePreset() {
 // Step advances one sampling/simulation tick.
 func (a *App) Step() {
 	a.tick++
+	a.pollTXResults()
+	a.pollSyncResults()
+	a.syncRXCapture()
+	a.drainRXPulses()
 	if a.Paused {
+		return
+	}
+	if a.ShowFoxhunt {
+		a.stepFoxhunt()
+		return
+	}
+	if a.ShowSensors {
+		a.stepSensors()
 		return
 	}
 	switch a.Mode {
@@ -237,6 +351,8 @@ func (a *App) Step() {
 		a.stepHeatmap()
 	case ModePulse, ModeDecode:
 		a.stepLiveChannel()
+	case ModeProbe:
+		a.stepProbe()
 	}
 }
 
@@ -245,6 +361,27 @@ func (a *App) Render(c *Canvas) {
 	c.Clear(ColBg)
 	a.drawHeader(c)
 
+	switch {
+	case a.ShowFoxhunt:
+		a.drawFoxhunt(c)
+		a.drawNavBar(c, [5]string{"RST PK", "MUTE", "BAND", "MOD", "BACK"})
+	case a.ShowTrimmer:
+		a.drawTrimmer(c)
+		a.drawNavBar(c, [5]string{"HDL", "AUTO", "TX", "SAVE", "BACK"})
+	case a.ShowSensors:
+		a.drawSensors(c)
+		a.drawNavBar(c, [5]string{pauseLabel(a.Paused), "UNIT", "PROF", "CLR", "BACK"})
+	default:
+		a.renderModeView(c)
+	}
+
+	if a.ShowHelp {
+		a.drawHelpModal(c)
+	}
+	a.drawToast(c)
+}
+
+func (a *App) renderModeView(c *Canvas) {
 	switch a.Mode {
 	case ModeHeatmap:
 		a.drawHeatmap(c)
@@ -258,15 +395,18 @@ func (a *App) Render(c *Canvas) {
 	case ModeSaved:
 		a.drawSaved(c)
 		a.drawNavBar(c, [5]string{"TX", "LOAD", "DEL", "PURGE", "MODE"})
+	case ModeProbe:
+		a.drawProbe(c)
+		a.drawNavBar(c, a.probeNavLabels())
 	case ModeSettings:
-		a.drawSettings(c)
-		a.drawNavBar(c, [5]string{"TOGGLE", "SAVE", "RESET", "HELP", "MODE"})
+		if a.ShowSources {
+			a.drawSourcesManage(c)
+			a.drawNavBar(c, [5]string{"ON/OFF", "DIR", "ALL", "SYNC", "BACK"})
+		} else {
+			a.drawSettings(c)
+			a.drawNavBar(c, [5]string{"TOGGLE", "SAVE", "RESET", "HELP", "MODE"})
+		}
 	}
-
-	if a.ShowHelp {
-		a.drawHelpModal(c)
-	}
-	a.drawToast(c)
 }
 
 func (a *App) drawToast(c *Canvas) {

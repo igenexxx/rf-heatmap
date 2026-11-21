@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"rf-heatmap/internal/config"
+	"rf-heatmap/internal/dbsync"
 	"rf-heatmap/internal/runner"
 )
 
@@ -19,7 +20,9 @@ func main() {
 	flag.IntVar(&cfg.ProbeBand, "band", 0, "Band index for --probe (0=433, 1=868, 2=315, 3=915, 4=ALL ISM)")
 	flag.IntVar(&cfg.ProbeSweeps, "sweeps", 10, "Number of sweeps for --probe")
 	flag.BoolVar(&cfg.MCPMode, "mcp", false, "Run stdio MCP server (requires opt-in in SET settings)")
+	flag.BoolVar(&cfg.SyncOnly, "sync", false, "Sync enabled remote .sub database sources and exit")
 	flag.StringVar(&cfg.ConfigPath, "config", config.DefaultPath(), "Path to settings JSON file")
+	flag.StringVar(&cfg.SourcesPath, "sources", dbsync.DefaultSourcesPath(), "Path to remote DB sources JSON file")
 	flag.StringVar(&cfg.FBPath, "fb", "/dev/fb0", "Linux framebuffer device path")
 	flag.StringVar(&cfg.SPIPath, "spi", "/dev/spidev0.1", "CC1101 spidev path")
 	flag.StringVar(&cfg.CapturesDir, "captures", runner.DefaultCapturesDir(), "Directory for saved .sub captures")

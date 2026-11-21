@@ -2,7 +2,7 @@ package mcpserver
 
 // toolDefinitions returns the canonical SSOT list of MCP tool schemas exposed by rf-heatmap.
 func (s *Server) toolDefinitions() []toolDefinition {
-	return []toolDefinition{
+	base := []toolDefinition{
 		{
 			Name:        "rf_get_status",
 			Description: "Return CC1101 hardware/simulator status, active settings, supported ISM bands, and modem presets.",
@@ -194,10 +194,203 @@ func (s *Server) toolDefinitions() []toolDefinition {
 		},
 		{
 			Name:        "rf_list_saved",
-			Description: "List saved Flipper-compatible .sub files from the captures directory and ~/subg/files.",
+			Description: "List saved Flipper-compatible .sub files, optionally filtered by source (user/external/all) or external database pack_id.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"source": map[string]any{
+						"type":        "string",
+						"description": "Optional filter: user, external, or all (default all)",
+					},
+					"pack": map[string]any{
+						"type":        "string",
+						"description": "Optional pack_id from rf_list_databases (e.g. user, db:fans, ext:subg)",
+					},
+				},
+			},
+		},
+		{
+			Name:        "rf_list_databases",
+			Description: "List separated signal catalogs: read-only external database packs (~/rf-heatmap/databases/<pack>, ~/subg/files) and the read-write User Library (~/rf-heatmap/captures).",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "rf_promote_to_user",
+			Description: "Copy a winning .sub signal from a read-only external database pack into the User Library (~/rf-heatmap/captures) with collision-safe naming.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pack": map[string]any{
+						"type":        "string",
+						"description": "External database pack_id (e.g. db:fans or ext:subg)",
+					},
+					"name": map[string]any{
+						"type":        "string",
+						"description": "Filename inside the pack (no path separators)",
+					},
+				},
+				"required": []string{"pack", "name"},
+			},
+		},
+		{
+			Name:        "rf_transmit_saved",
+			Description: "Encode and transmit a saved .sub signal from the User Library or an external database pack via CC1101 GDO0 (requires confirm_rf=true).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pack": map[string]any{
+						"type":        "string",
+						"description": "Optional pack_id (default: user)",
+					},
+					"name": map[string]any{
+						"type":        "string",
+						"description": "Filename of the .sub signal (no path separators)",
+					},
+					"confirm_rf": map[string]any{
+						"type":        "boolean",
+						"description": "Must be explicitly true to authorize RF transmission",
+					},
+				},
+				"required": []string{"name", "confirm_rf"},
+			},
+		},
+		{
+			Name:        "rf_list_sources",
+			Description: "List configured remote .sub database sources (GitHub repositories or HTTP JSON manifests) from sources.json.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "rf_add_source",
+			Description: "Add or update a remote .sub database source (type=github via github_url or owner/repo/branch/subpath, or type=manifest via https url). Syncs into ~/rf-heatmap/databases/<id>/.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{
+						"type":        "string",
+						"description": "Unique pack subfolder ID (lowercase a-z0-9_-, 1..32 chars, not user/root)",
+					},
+					"type": map[string]any{
+						"type":        "string",
+						"description": "Source type: github or manifest",
+					},
+					"github_url": map[string]any{
+						"type":        "string",
+						"description": "Optional GitHub repo/tree URL (e.g. https://github.com/owner/repo/tree/main/Sub-GHz/Fans)",
+					},
+					"owner": map[string]any{
+						"type":        "string",
+						"description": "GitHub owner/org (for type=github if github_url omitted)",
+					},
+					"repo": map[string]any{
+						"type":        "string",
+						"description": "GitHub repository name",
+					},
+					"branch": map[string]any{
+						"type":        "string",
+						"description": "GitHub branch (default: main)",
+					},
+					"subpath": map[string]any{
+						"type":        "string",
+						"description": "Optional subfolder inside the GitHub repo",
+					},
+					"url": map[string]any{
+						"type":        "string",
+						"description": "HTTPS JSON manifest URL (for type=manifest)",
+					},
+					"prune": map[string]any{
+						"type":        "boolean",
+						"description": "Remove local .sub files deleted from remote on sync (default: false)",
+					},
+				},
+				"required": []string{"id", "type"},
+			},
+		},
+		{
+			Name:        "rf_remove_source",
+			Description: "Remove one or more remote .sub database sources from sources.json (requires confirm=true; optional delete_files=true removes ~/rf-heatmap/databases/<id>/).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{
+						"type":        "string",
+						"description": "Single source ID to remove",
+					},
+					"ids": map[string]any{
+						"type":        "array",
+						"description": "Optional list of source IDs for batch removal",
+						"items":       map[string]any{"type": "string"},
+					},
+					"confirm": map[string]any{
+						"type":        "boolean",
+						"description": "Must be explicitly true to confirm removal",
+					},
+					"delete_files": map[string]any{
+						"type":        "boolean",
+						"description": "Also delete downloaded subdirectory ~/rf-heatmap/databases/<id>/ (default: false)",
+					},
+				},
+				"required": []string{"confirm"},
+			},
+		},
+		{
+			Name:        "rf_delete_pack_files",
+			Description: "Delete one or more .sub files inside a downloaded ~/rf-heatmap/databases/<pack>/ directory (requires confirm=true; records deleted files in .sync-state.json ignored list by default). Rejects ~/subg/files and virtual GEN:* packs.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pack": map[string]any{
+						"type":        "string",
+						"description": "Database pack_id inside ~/rf-heatmap/databases (e.g. db:fans)",
+					},
+					"names": map[string]any{
+						"type":        "array",
+						"description": "List of .sub filenames to delete",
+						"items":       map[string]any{"type": "string"},
+					},
+					"ignore_on_sync": map[string]any{
+						"type":        "boolean",
+						"description": "Add deleted filenames to .sync-state.json ignored list (default: true)",
+					},
+					"confirm": map[string]any{
+						"type":        "boolean",
+						"description": "Must be explicitly true to confirm deletion",
+					},
+				},
+				"required": []string{"pack", "names", "confirm"},
+			},
+		},
+		{
+			Name:        "rf_rank_probe_pack",
+			Description: "Smart Probe Ranking: rank .sub entries in a database pack by frequency-gated 8D RF cosine similarity against a live RAW pulse capture.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pack":    map[string]any{"type": "string", "description": "Pack ID (e.g. db:fans or user)"},
+					"pulses":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
+					"freq_hz": map[string]any{"type": "integer"},
+					"preset":  map[string]any{"type": "string"},
+					"top_k":   map[string]any{"type": "integer"},
+				},
+				"required": []string{"pack", "pulses"},
+			},
+		},
+		{
+			Name:        "rf_sync_sources",
+			Description: "Run incremental ETag/SHA delta sync for a single source ID or all enabled sources, downloading only new or modified .sub files.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{
+						"type":        "string",
+						"description": "Optional source ID to sync; omit to sync all enabled sources",
+					},
+				},
 			},
 		},
 		{
@@ -299,4 +492,5 @@ func (s *Server) toolDefinitions() []toolDefinition {
 			},
 		},
 	}
+	return append(base, s.extToolDefinitions()...)
 }

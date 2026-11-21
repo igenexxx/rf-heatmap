@@ -34,6 +34,9 @@ func (a *App) handleHeatmapKey(act KeyAction) {
 		a.lockPeakOrCursor(freqs)
 	case KeyNav7:
 		a.cyclePreset()
+	case KeyFoxhunt:
+		a.ActiveFreq = freqs[a.CursorCol]
+		a.EnterFoxhunt(ModeHeatmap)
 	}
 }
 

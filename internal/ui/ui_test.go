@@ -187,8 +187,8 @@ func TestSettingsModeAndPersistence(t *testing.T) {
 	app := NewApp(nil, t.TempDir())
 	app.SetConfigPath(cfgPath)
 
-	// Tab through all 5 modes: HEATMAP -> PULSE -> DECODE -> SAVED -> SET -> HEATMAP.
-	wantModes := []Mode{ModePulse, ModeDecode, ModeSaved, ModeSettings, ModeHeatmap}
+	// Tab through all 6 modes: HEATMAP -> PULSE -> DECODE -> SAVED -> PROBE -> SET -> HEATMAP.
+	wantModes := []Mode{ModePulse, ModeDecode, ModeSaved, ModeProbe, ModeSettings, ModeHeatmap}
 	for _, want := range wantModes {
 		app.HandleKey(KeyTab)
 		if app.Mode != want {

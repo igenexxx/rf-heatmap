@@ -3,37 +3,8 @@ package cc1101
 import (
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
-	"syscall"
 	"time"
-	"unsafe"
 )
-
-const (
-	// SPI ioctl constants for Linux spidev (aarch64/generic).
-	spiIOCMagic      = 'k'
-	spiIOCWrMode     = 0x40016B01
-	spiIOCWrBits     = 0x40016B03
-	spiIOCWrMaxSpeed = 0x40046B04
-	spiIOCMessage1   = 0x40206B00
-)
-
-type spiIOCTransfer struct {
-	txBuf       uint64
-	rxBuf       uint64
-	len         uint32
-	speedHz     uint32
-	delayUsecs  uint16
-	bitsPerWord uint8
-	csChange    uint8
-	txNBits     uint8
-	rxNBits     uint8
-	wordDelay   uint8
-	pad         uint8
-}
 
 // Transport abstracts SPI + GPIO control so the radio driver is testable without hardware.
 type Transport interface {
@@ -147,36 +118,35 @@ func (r *Radio) ApplyPreset(p Preset) error {
 	}
 	paTable := []uint8{0x00, txPowerMax, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	if spec.MDMCFG2&0x70 == 0x00 {
-		// 2-FSK uses PATABLE[0]
+		// 2-FSK uses PATABLE[0].
 		paTable[0] = txPowerMax
 	}
 
-	steps := []struct {
-		fn func() error
-	}{
-		{func() error { return r.strobe(strobeIdle) }},
-		{func() error { return r.writeReg(regIOCFG0, gdo0) }},
-		{func() error { return r.writeReg(regPKTCTRL0, 0x32) }}, // async serial mode
-		{func() error { return r.writeReg(regFSCTRL1, 0x06) }},
-		{func() error { return r.writeReg(regMDMCFG4, spec.MDMCFG4) }},
-		{func() error { return r.writeReg(regMDMCFG3, spec.MDMCFG3) }},
-		{func() error { return r.writeReg(regMDMCFG2, spec.MDMCFG2) }},
-		{func() error { return r.writeReg(regDEVIATN, spec.DEVIATN) }},
-		{func() error { return r.writeReg(regMCSM0, 0x18) }},
-		{func() error { return r.writeReg(regFOCCFG, spec.FOCCFG) }},
-		{func() error { return r.writeReg(regAGCCTRL2, 0x07) }},
-		{func() error { return r.writeReg(regAGCCTRL1, 0x00) }},
-		{func() error { return r.writeReg(regAGCCTRL0, 0x91) }},
-		{func() error { return r.writeReg(regFREND1, spec.FREND1) }},
-		{func() error { return r.writeReg(regFREND0, spec.FREND0) }},
-		{func() error { return r.writeBurst(regPATABLE, paTable) }},
+	if err := r.strobe(strobeIdle); err != nil {
+		return err
 	}
-	for _, s := range steps {
-		if err := s.fn(); err != nil {
+	regs := [][2]uint8{
+		{regIOCFG0, gdo0},
+		{regPKTCTRL0, 0x32}, // async serial mode
+		{regFSCTRL1, 0x06},
+		{regMDMCFG4, spec.MDMCFG4},
+		{regMDMCFG3, spec.MDMCFG3},
+		{regMDMCFG2, spec.MDMCFG2},
+		{regDEVIATN, spec.DEVIATN},
+		{regMCSM0, 0x18},
+		{regFOCCFG, spec.FOCCFG},
+		{regAGCCTRL2, 0x07},
+		{regAGCCTRL1, 0x00},
+		{regAGCCTRL0, 0x91},
+		{regFREND1, spec.FREND1},
+		{regFREND0, spec.FREND0},
+	}
+	for _, rv := range regs {
+		if err := r.writeReg(rv[0], rv[1]); err != nil {
 			return err
 		}
 	}
-	return nil
+	return r.writeBurst(regPATABLE, paTable)
 }
 
 // SetDataOutput enables or disables GDO0 asynchronous serial output.
@@ -255,108 +225,4 @@ func (r *Radio) ReadRSSIDBm() (int32, error) {
 // Idle puts the CC1101 into IDLE state.
 func (r *Radio) Idle() error {
 	return r.strobe(strobeIdle)
-}
-
-// LinuxTransport implements Transport using /dev/spidev0.1, /dev/gpiochip0, and ext_5v_out.
-type LinuxTransport struct {
-	spiFile     *os.File
-	speedHz     uint32
-	rfSwPin     int
-	rfSwState   string
-	pinctrlUsed bool
-}
-
-// OpenLinuxTransport powers the Cap CC1101, opens spidev, and claims GPIO 14 (RF_SW0).
-func OpenLinuxTransport(spiPath string, speedHz uint32) (*LinuxTransport, error) {
-	if err := enableCapPower(); err != nil {
-		return nil, err
-	}
-	f, err := os.OpenFile(spiPath, os.O_RDWR, 0)
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", spiPath, err)
-	}
-	mode := uint8(0)
-	bits := uint8(8)
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), spiIOCWrMode, uintptr(unsafe.Pointer(&mode))); errno != 0 {
-		_ = f.Close()
-		return nil, fmt.Errorf("spi set mode: %w", errno)
-	}
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), spiIOCWrBits, uintptr(unsafe.Pointer(&bits))); errno != 0 {
-		_ = f.Close()
-		return nil, fmt.Errorf("spi set bits: %w", errno)
-	}
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), spiIOCWrMaxSpeed, uintptr(unsafe.Pointer(&speedHz))); errno != 0 {
-		_ = f.Close()
-		return nil, fmt.Errorf("spi set speed: %w", errno)
-	}
-
-	lt := &LinuxTransport{spiFile: f, speedHz: speedHz, rfSwPin: 14}
-	lt.snapshotAndClaimRFSwitch()
-	return lt, nil
-}
-
-func (lt *LinuxTransport) Transfer(tx []byte) ([]byte, error) {
-	if len(tx) == 0 {
-		return nil, nil
-	}
-	rx := make([]byte, len(tx))
-	tr := spiIOCTransfer{
-		txBuf:       uint64(uintptr(unsafe.Pointer(&tx[0]))),
-		rxBuf:       uint64(uintptr(unsafe.Pointer(&rx[0]))),
-		len:         uint32(len(tx)),
-		speedHz:     lt.speedHz,
-		bitsPerWord: 8,
-	}
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, lt.spiFile.Fd(), spiIOCMessage1, uintptr(unsafe.Pointer(&tr)))
-	if errno != 0 {
-		return nil, fmt.Errorf("spi transfer: %w", errno)
-	}
-	return rx, nil
-}
-
-func (lt *LinuxTransport) snapshotAndClaimRFSwitch() {
-	out, err := exec.Command("pinctrl", "get", strconv.Itoa(lt.rfSwPin)).Output()
-	if err == nil {
-		lt.rfSwState = strings.TrimSpace(string(out))
-		lt.pinctrlUsed = true
-	}
-	_ = exec.Command("pinctrl", "set", strconv.Itoa(lt.rfSwPin), "op", "dl").Run()
-}
-
-func (lt *LinuxTransport) SetRFSwitch(high bool) error {
-	lvl := "dl"
-	if high {
-		lvl = "dh"
-	}
-	return exec.Command("pinctrl", "set", strconv.Itoa(lt.rfSwPin), "op", lvl).Run()
-}
-
-func (lt *LinuxTransport) Close() error {
-	if lt.pinctrlUsed && strings.Contains(lt.rfSwState, "a0") {
-		_ = exec.Command("pinctrl", "set", strconv.Itoa(lt.rfSwPin), "a0").Run()
-	} else {
-		_ = exec.Command("pinctrl", "set", strconv.Itoa(lt.rfSwPin), "ip").Run()
-	}
-	if lt.spiFile != nil {
-		return lt.spiFile.Close()
-	}
-	return nil
-}
-
-func enableCapPower() error {
-	// Ensure GPIO 26 is output high and ext_5v_out is enabled.
-	_ = exec.Command("pinctrl", "set", "26", "op", "dh").Run()
-	const ledPath = "/sys/class/leds/ext_5v_out/brightness"
-	data, err := os.ReadFile(ledPath)
-	if err != nil {
-		return nil // image without LED class control
-	}
-	val, _ := strconv.Atoi(strings.TrimSpace(string(data)))
-	if val <= 0 {
-		if err := os.WriteFile(ledPath, []byte("1"), 0o644); err != nil {
-			return fmt.Errorf("enable ext_5v_out: %w", err)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	return nil
 }

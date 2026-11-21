@@ -58,7 +58,7 @@ func ThermalColor(dbm int32) uint16 {
 		{0.78, 250, 120, 16},
 		{1.00, 255, 248, 185},
 	}
-	for i := 0; i < len(stops)-1; i++ {
+	for i := range len(stops) - 1 {
 		a, b := stops[i], stops[i+1]
 		if t >= a.pos && t <= b.pos {
 			u := (t - a.pos) / (b.pos - a.pos)
@@ -185,7 +185,7 @@ func (c *Canvas) DrawText(x, y int, text string, col uint16, scale int) {
 		scale = 1
 	}
 	cx := x
-	for i := 0; i < len(text); i++ {
+	for i := range len(text) {
 		ch := text[i]
 		if ch == '\n' {
 			cx = x
@@ -193,9 +193,9 @@ func (c *Canvas) DrawText(x, y int, text string, col uint16, scale int) {
 			continue
 		}
 		glyph := glyph5x7(ch)
-		for colIdx := 0; colIdx < 5; colIdx++ {
+		for colIdx := range 5 {
 			bits := glyph[colIdx]
-			for rowIdx := 0; rowIdx < 7; rowIdx++ {
+			for rowIdx := range 7 {
 				if (bits>>uint(rowIdx))&1 != 0 {
 					if scale == 1 {
 						c.SetPixel(cx+colIdx, y+rowIdx, col)

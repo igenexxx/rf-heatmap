@@ -2,3 +2,4 @@ dist/
 *.deb
 *.out
 .DS_Store
+plans/

@@ -29,6 +29,8 @@ const (
 	KeyMod
 	KeyHelp
 	KeyDelete
+	KeyAutoSquelch
+	KeyAutoLock
 )
 
 // Linux input_event (64-bit arm64): tv_sec(8), tv_usec(8), type(2), code(2), value(4) = 24 bytes.
@@ -52,6 +54,7 @@ const (
 	codeD          uint16 = 32
 	codeF          uint16 = 33
 	codeH          uint16 = 35
+	codeL          uint16 = 38
 	codeZ          uint16 = 44
 	codeX          uint16 = 45
 	codeC          uint16 = 46
@@ -65,46 +68,37 @@ const (
 	codeDelete     uint16 = 111
 )
 
+var linuxKeyMap = map[uint16]KeyAction{
+	codeEsc:       KeyQuit,
+	codeQ:         KeyQuit,
+	codeTab:       KeyTab,
+	codeEnter:     KeyEnter,
+	codeSpace:     KeySpace,
+	codeUp:        KeyUp,
+	codeF:         KeyUp,
+	codeDown:      KeyDown,
+	codeX:         KeyDown,
+	codeLeft:      KeyLeft,
+	codeZ:         KeyLeft,
+	codeRight:     KeyRight,
+	codeC:         KeyRight,
+	code4:         KeyNav4,
+	code5:         KeyNav5,
+	code6:         KeyNav6,
+	code7:         KeyNav7,
+	code8:         KeyNav8,
+	codeB:         KeyBand,
+	codeM:         KeyMod,
+	codeH:         KeyHelp,
+	codeS:         KeyAutoSquelch,
+	codeL:         KeyAutoLock,
+	codeDelete:    KeyDelete,
+	codeBackspace: KeyDelete,
+}
+
 // MapLinuxKeyCode converts a Linux evdev keycode into a KeyAction.
 func MapLinuxKeyCode(code uint16) KeyAction {
-	switch code {
-	case codeEsc, codeQ:
-		return KeyQuit
-	case codeTab:
-		return KeyTab
-	case codeEnter:
-		return KeyEnter
-	case codeSpace:
-		return KeySpace
-	case codeUp, codeF:
-		return KeyUp
-	case codeDown, codeX:
-		return KeyDown
-	case codeLeft, codeZ:
-		return KeyLeft
-	case codeRight, codeC:
-		return KeyRight
-	case code4:
-		return KeyNav4
-	case code5:
-		return KeyNav5
-	case code6:
-		return KeyNav6
-	case code7:
-		return KeyNav7
-	case code8:
-		return KeyNav8
-	case codeB:
-		return KeyBand
-	case codeM:
-		return KeyMod
-	case codeH:
-		return KeyHelp
-	case codeDelete, codeBackspace:
-		return KeyDelete
-	default:
-		return KeyNone
-	}
+	return linuxKeyMap[code]
 }
 
 // StartEvdevReader opens CardputerZero keyboard evdev nodes and emits KeyActions.
@@ -112,39 +106,14 @@ func StartEvdevReader() (<-chan KeyAction, func()) {
 	ch := make(chan KeyAction, 32)
 	done := make(chan struct{})
 
-	paths := findKeyboardEvdevPaths()
 	var files []*os.File
-	for _, p := range paths {
+	for _, p := range findKeyboardEvdevPaths() {
 		f, err := os.Open(p)
 		if err != nil {
 			continue
 		}
 		files = append(files, f)
-		go func(dev *os.File) {
-			buf := make([]byte, 24)
-			for {
-				select {
-				case <-done:
-					return
-				default:
-				}
-				n, err := dev.Read(buf)
-				if err != nil || n < 24 {
-					return
-				}
-				evType := binary.LittleEndian.Uint16(buf[16:18])
-				evCode := binary.LittleEndian.Uint16(buf[18:20])
-				evVal := int32(binary.LittleEndian.Uint32(buf[20:24]))
-				if evType == evKey && (evVal == keyValPress || evVal == keyValRepeat) {
-					if act := MapLinuxKeyCode(evCode); act != KeyNone {
-						select {
-						case ch <- act:
-						default:
-						}
-					}
-				}
-			}
-		}(f)
+		go readEvdevLoop(f, done, ch)
 	}
 
 	stop := func() {
@@ -154,6 +123,34 @@ func StartEvdevReader() (<-chan KeyAction, func()) {
 		}
 	}
 	return ch, stop
+}
+
+func readEvdevLoop(dev *os.File, done <-chan struct{}, ch chan<- KeyAction) {
+	const inputEventSize = 24
+	buf := make([]byte, inputEventSize)
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		n, err := dev.Read(buf)
+		if err != nil || n < inputEventSize {
+			return
+		}
+		evType := binary.LittleEndian.Uint16(buf[16:18])
+		evCode := binary.LittleEndian.Uint16(buf[18:20])
+		evVal := int32(binary.LittleEndian.Uint32(buf[20:24]))
+		if evType != evKey || (evVal != keyValPress && evVal != keyValRepeat) {
+			continue
+		}
+		if act := MapLinuxKeyCode(evCode); act != KeyNone {
+			select {
+			case ch <- act:
+			default:
+			}
+		}
+	}
 }
 
 func findKeyboardEvdevPaths() []string {

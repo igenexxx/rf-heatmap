@@ -82,6 +82,7 @@ func main() {
 	savePNG(c, filepath.Join(*outDir, "pulse.png"), *scale)
 
 	app.HandleKey(ui.KeyTab)
+	app.ToastText = ""
 	for range 12 {
 		app.Step()
 	}
@@ -89,10 +90,17 @@ func main() {
 	savePNG(c, filepath.Join(*outDir, "decode.png"), *scale)
 
 	app.HandleKey(ui.KeyTab)
+	app.ToastText = ""
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "saved.png"), *scale)
 
 	app.HandleKey(ui.KeyTab)
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "settings.png"), *scale)
+
+	app.HandleKey(ui.KeyTab)
+	app.ToastText = ""
 	app.HandleKey(ui.KeyHelp)
 	app.HandleKey(ui.KeyRight)
 	app.Render(c)

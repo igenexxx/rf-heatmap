@@ -2,6 +2,9 @@
 
 A fast, user-friendly **CC1101 Sub-GHz Thermal Waterfall, RSSI Oscilloscope, OOK Protocol Decoder & Flipper `.sub` Studio** with **on-device Smart Squelch & Auto-Lock ML** for the **M5Stack CardputerZero** + **Cap CC1101**.
 
+> [!CAUTION]
+> **Legal & Responsible Use Disclaimer:** This software is provided strictly for **educational, research, diagnostics, and authorized security testing** on devices, networks, and radio frequencies that you own or have explicit written permission to test. Unauthorized interception, replay, jamming, or interference with third-party devices or communications is illegal and punishable by law. Radio transmission in Sub-GHz ISM bands is subject to local telecommunications regulations (FCC, ETSI/CE, etc.) — you are solely responsible for complying with applicable frequency, power, and duty-cycle laws. Provided **"AS IS"** without warranty of any kind; use entirely at your own risk.
+
 ![HEATMAP](assets/screenshots/heatmap.png)
 
 ## Features

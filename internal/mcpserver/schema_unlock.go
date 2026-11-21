@@ -223,5 +223,49 @@ func (s *Server) unlockToolDefinitions() []toolDefinition {
 				},
 			},
 		},
+		{
+			Name:        "rf_save_room_baseline",
+			Description: "Capture multi-sweep Welford room baseline statistics (mean, std, peak dBm) and save atomically to ~/.config/rf-heatmap/baselines/<name>.json (0600).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":   map[string]any{"type": "string", "description": "Baseline name (1..64 safe chars, no path separators)"},
+					"band":   map[string]any{"type": "integer", "description": "Band index 0..4 (default 0=433 ISM)", "minimum": 0, "maximum": 4},
+					"sweeps": map[string]any{"type": "integer", "description": "Sweeps to average (1..30, default 8)", "minimum": 1, "maximum": 30},
+					"frames": map[string]any{"type": "array", "description": "Optional inline sweep frames ([][]float32) instead of live RF capture", "items": map[string]any{"type": "array", "items": map[string]any{"type": "number"}}},
+				},
+				"required": []string{"name"},
+			},
+		},
+		{
+			Name:        "rf_list_room_baselines",
+			Description: "List all saved room spectrum baselines in ~/.config/rf-heatmap/baselines/.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		},
+		{
+			Name:        "rf_diff_room_baseline",
+			Description: "Compare a live sweep (or inline live_dbm array) against a saved room baseline and classify bins as normal, elevated, or new_emitter.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":           map[string]any{"type": "string", "description": "Saved baseline name"},
+					"live_dbm":       map[string]any{"type": "array", "description": "Optional live per-bin RSSI array in dBm (sweeps band if omitted)", "items": map[string]any{"type": "number"}},
+					"only_anomalies": map[string]any{"type": "boolean", "description": "If true, return only elevated and new_emitter bins"},
+				},
+				"required": []string{"name"},
+			},
+		},
+		{
+			Name:        "rf_delete_room_baseline",
+			Description: "Delete a saved room baseline JSON file from ~/.config/rf-heatmap/baselines/. Requires confirm=true.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":    map[string]any{"type": "string", "description": "Baseline name to delete (no path separators)"},
+					"confirm": map[string]any{"type": "boolean", "description": "Must be explicitly true to delete the baseline"},
+				},
+				"required": []string{"name", "confirm"},
+			},
+		},
 	}
 }

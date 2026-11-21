@@ -15,6 +15,7 @@ All specifications strictly obey the repository's DDD contracts in [DOMAIN.md](.
 | **03** | [03-foxhunt-and-raw-trimmer.md](03-foxhunt-and-raw-trimmer.md) | `US-RF-3.1` – `US-RF-3.4` | `internal/rfml`, `internal/subfile`, `internal/library`, `internal/ui`, `internal/mcpserver` | `rf_foxhunt_sample`, `rf_trim_raw` |
 | **04** | [04-freqest-txpower-and-wor.md](04-freqest-txpower-and-wor.md) | `US-RF-4.1` – `US-RF-4.3` | `internal/cc1101`, `internal/config`, `internal/ui`, `internal/mcpserver` | `rf_measure_freq_offset`, `rf_set_tx_power`, `rf_wor_listen` |
 | **05** | [05-packet-engine-chat-and-pocsag-wmbus.md](05-packet-engine-chat-and-pocsag-wmbus.md) | `US-RF-5.1` – `US-RF-5.3` | `internal/cc1101`, `internal/sensors`, `internal/mcpserver` | `rf_send_packet`, `rf_recv_packet`, `rf_decode_pocsag`, `rf_decode_wmbus` |
+| **06** | [06-room-baseline-emi-diff.md](06-room-baseline-emi-diff.md) | `US-RF-6.1` – `US-RF-6.3` | `internal/rfml`, `internal/ui`, `internal/mcpserver` | `rf_save_room_baseline`, `rf_list_room_baselines`, `rf_diff_room_baseline`, `rf_delete_room_baseline` |
 
 ---
 

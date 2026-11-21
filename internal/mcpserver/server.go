@@ -37,6 +37,7 @@ type Options struct {
 	Syncer         *dbsync.Syncer
 	ExtraSavedDirs []string // nil defaults to [~/subg/files]; set to []string{} to disable
 	ConfigPath     string
+	BaselinesDir   string
 	Settings       config.Settings
 	SettleDelay    time.Duration // RX settle delay per hop (default 1200µs when Radio != nil)
 }
@@ -51,6 +52,7 @@ type Server struct {
 	extraDirs    []string
 	store        *library.Store
 	configPath   string
+	baselinesDir string
 	settings     config.Settings
 	settleDelay  time.Duration
 
@@ -80,17 +82,15 @@ func NewServer(opts Options) *Server {
 	if syncer == nil {
 		syncer = dbsync.NewSyncer(opts.DatabasesDir)
 	}
+	baselinesDir := opts.BaselinesDir
+	if baselinesDir == "" {
+		baselinesDir = rfml.DefaultBaselinesDir()
+	}
 	return &Server{
-		radio:        opts.Radio,
-		capturesDir:  opts.CapturesDir,
-		databasesDir: opts.DatabasesDir,
-		sourcesPath:  sourcesPath,
-		syncer:       syncer,
-		extraDirs:    extra,
-		store:        store,
-		configPath:   opts.ConfigPath,
-		settings:     opts.Settings.Normalize(),
-		settleDelay:  settle,
+		radio: opts.Radio, capturesDir: opts.CapturesDir, databasesDir: opts.DatabasesDir,
+		sourcesPath: sourcesPath, syncer: syncer, extraDirs: extra, store: store,
+		configPath: opts.ConfigPath, baselinesDir: baselinesDir,
+		settings: opts.Settings.Normalize(), settleDelay: settle,
 	}
 }
 
@@ -302,6 +302,9 @@ func (s *Server) dispatchTool(name string, rawArgs json.RawMessage) (*toolCallRe
 	case "rf_decode_wmbus":
 		return s.toolDecodeWMBus(rawArgs)
 	default:
+		if res, err, ok := s.dispatchBaselineTool(name, rawArgs); ok {
+			return res, err
+		}
 		return nil, &rpcError{Code: errCodeInvalidParams, Message: fmt.Sprintf("unknown tool: %s", name)}
 	}
 }

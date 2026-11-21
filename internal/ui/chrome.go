@@ -65,11 +65,15 @@ func (a *App) drawHeader(c *Canvas) {
 	}
 	drawStatusPill(c, 196, 30, "ASQ", asqCol)
 
-	lckCol := ColMuted
-	if a.AutoLock {
-		lckCol = ColCyan
+	if a.Mode == ModeHeatmap && a.DiffMode && !a.ShowFoxhunt && !a.ShowTrimmer && !a.ShowSensors {
+		drawStatusPill(c, 230, 34, "DIFF", ColRed)
+	} else {
+		lckCol := ColMuted
+		if a.AutoLock {
+			lckCol = ColCyan
+		}
+		drawStatusPill(c, 230, 34, "LOCK", lckCol)
 	}
-	drawStatusPill(c, 230, 34, "LOCK", lckCol)
 
 	if a.SimMode {
 		drawStatusPill(c, 272, 44, "SIM", ColAmber)
@@ -129,9 +133,9 @@ var helpPages = []helpPageContent{
 			"Amber ticks: Peak-Hold max signal.",
 			"Cyan box: Cursor channel (Z/C move).",
 			"Bottom: Thermal Waterfall over time:",
-			" Navy(-110) -> Purple -> Orange ->",
-			" Yellow(-35dBm) = strongest bursts!",
+			" Navy(-110)->Purple->Orange->Yellow!",
 			"PK=strongest freq, CUR=cursor freq.",
+			"B: Save room baseline, D: EMI DIFF",
 			"Press Enter/6 to LOCK & jump to PULSE",
 		},
 	},

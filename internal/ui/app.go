@@ -59,6 +59,7 @@ func NewApp(radio *cc1101.Radio, capturesDir string) *App {
 			CursorCol:  defaultCursorCol,
 			PeakDBm:    defaultPeakDBm,
 			PeakFreqHz: defaultFreqHz,
+			DiffBins:   make([]rfml.DiffBin, 0, maxCols),
 		},
 		PulseState: PulseState{
 			LiveRSSI: defaultLiveRSSIDBm,
@@ -80,10 +81,11 @@ func NewApp(radio *cc1101.Radio, capturesDir string) *App {
 			Probe: library.NewProbeSession(def.ProbeIntervalMs),
 		},
 		SettingsState: SettingsState{
-			SourcesPath: dbsync.DefaultSourcesPath(),
-			Settings:    def,
-			Syncer:      dbsync.NewSyncer(store.DatabasesDir),
-			syncDoneCh:  make(chan []dbsync.SyncReport, 1),
+			SourcesPath:  dbsync.DefaultSourcesPath(),
+			BaselinesDir: rfml.DefaultBaselinesDir(),
+			Settings:     def,
+			Syncer:       dbsync.NewSyncer(store.DatabasesDir),
+			syncDoneCh:   make(chan []dbsync.SyncReport, 1),
 		},
 		ChromeState: ChromeState{
 			Mode: ModeHeatmap,
@@ -249,6 +251,9 @@ func (a *App) handleGlobalKey(act KeyAction) bool {
 			a.refreshProbePacks()
 		}
 	case KeyBand:
+		if a.Mode == ModeHeatmap {
+			return false
+		}
 		if a.Mode == ModeProbe && a.cycleProbeGenFreq() {
 			return false
 		}
@@ -315,6 +320,7 @@ func (a *App) cycleBand() {
 		a.LiveBaseline.Reset()
 	}
 	a.HasBurst = false
+	a.DiffMode = false
 	freqs := DefaultBands[a.BandIdx].FreqsHz
 	if a.CursorCol >= len(freqs) {
 		a.CursorCol = len(freqs) / 2

@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"rf-heatmap/internal/rfml"
 )
 
 const (
@@ -15,6 +17,8 @@ const (
 	heatmapWfTop       = 82
 	heatmapLockPeakDBm = -85
 	sweepSettleDelay   = 1200 * time.Microsecond
+	liveBaselineName   = "room_live"
+	liveBaselineFrames = 8
 )
 
 func (a *App) handleHeatmapKey(act KeyAction) {
@@ -34,10 +38,98 @@ func (a *App) handleHeatmapKey(act KeyAction) {
 		a.lockPeakOrCursor(freqs)
 	case KeyNav7:
 		a.cyclePreset()
+	case KeyBand:
+		a.captureRoomBaseline()
+	case KeyMark:
+		a.toggleDiffMode()
 	case KeyFoxhunt:
 		a.ActiveFreq = freqs[a.CursorCol]
 		a.EnterFoxhunt(ModeHeatmap)
 	}
+}
+
+func (a *App) captureRoomBaseline() {
+	band := DefaultBands[a.BandIdx]
+	n := min(len(band.FreqsHz), maxCols)
+	if n == 0 {
+		return
+	}
+	frames := a.collectRecentSweepFrames(n)
+	startHz, stepHz := bandFreqBounds(band.FreqsHz[:n])
+	base, err := rfml.CaptureBaselineFromFrames(liveBaselineName, band.Name, startHz, stepHz, frames)
+	if err != nil {
+		a.SetToast("Baseline err: " + err.Error())
+		return
+	}
+	if _, err := rfml.SaveRoomBaselineAtomic(a.BaselinesDir, base); err != nil {
+		a.SetToast("Baseline save err")
+		return
+	}
+	a.ActiveBaseline = base
+	a.updateHeatmapDiff(n)
+	a.SetToast("Baseline '" + liveBaselineName + "' saved")
+}
+
+func (a *App) collectRecentSweepFrames(n int) [][]float32 {
+	count := min(int(a.tick), liveBaselineFrames)
+	if count <= 0 {
+		row := make([]float32, n)
+		for i := range n {
+			row[i] = float32(a.SweepRSSI[i])
+		}
+		return [][]float32{row}
+	}
+	frames := make([][]float32, count)
+	for k := range count {
+		ringIdx := (a.WfHead - 1 - k + waterfallRows) % waterfallRows
+		row := make([]float32, n)
+		for i := range n {
+			row[i] = float32(a.Waterfall[ringIdx][i])
+		}
+		frames[k] = row
+	}
+	return frames
+}
+
+func bandFreqBounds(freqs []uint32) (uint32, uint32) {
+	if len(freqs) == 0 {
+		return 0, 0
+	}
+	if len(freqs) == 1 {
+		return freqs[0], 0
+	}
+	return freqs[0], freqs[1] - freqs[0]
+}
+
+func (a *App) toggleDiffMode() {
+	if a.DiffMode {
+		a.DiffMode = false
+		a.SetToast("EMI DIFF OFF")
+		return
+	}
+	if a.ActiveBaseline == nil {
+		loaded, err := rfml.LoadRoomBaseline(a.BaselinesDir, liveBaselineName)
+		if err != nil {
+			a.SetToast("No baseline - press B")
+			return
+		}
+		a.ActiveBaseline = loaded
+	}
+	a.DiffMode = true
+	n := min(len(DefaultBands[a.BandIdx].FreqsHz), maxCols)
+	a.updateHeatmapDiff(n)
+	a.SetToast("EMI DIFF ON: " + a.ActiveBaseline.Name)
+}
+
+func (a *App) updateHeatmapDiff(n int) {
+	if !a.DiffMode || a.ActiveBaseline == nil || n <= 0 {
+		return
+	}
+	var live [maxCols]float32
+	for i := range n {
+		live[i] = float32(a.SweepRSSI[i])
+	}
+	a.DiffBins = rfml.ComputeDiff(a.ActiveBaseline, live[:n], a.DiffBins)
 }
 
 func (a *App) moveHeatmapCursor(freqs []uint32, delta int) {
@@ -90,6 +182,7 @@ func (a *App) stepHeatmap() {
 		a.PeakFreqHz = rowMaxFreq
 	}
 	a.updateSweepBaseline(freqs, n)
+	a.updateHeatmapDiff(n)
 }
 
 func (a *App) sampleChannelRSSI(freqHz uint32, idx, n int) int32 {
@@ -191,8 +284,9 @@ func (a *App) drawHeatmapBars(c *Canvas, n int) {
 		bw := max(2, colW-2)
 
 		if h := rssiToHeight(a.SweepRSSI[i], heatmapBarH-4); h > 0 {
-			c.FillRect(bx, heatmapBarTop+heatmapBarH-2-h, bw, h, ThermalColor(a.SweepRSSI[i]))
+			c.FillRect(bx, heatmapBarTop+heatmapBarH-2-h, bw, h, a.heatmapBarColor(i))
 		}
+		a.drawHeatmapDiffMarker(c, i, bx, bw)
 		a.drawHeatmapBaselineTicks(c, i, bx, bw)
 		if ph := rssiToHeight(a.PeakHold[i], heatmapBarH-4); ph > 1 {
 			c.HLine(bx, heatmapBarTop+heatmapBarH-2-ph, bw, ColAmber)
@@ -200,6 +294,30 @@ func (a *App) drawHeatmapBars(c *Canvas, n int) {
 		if i == a.CursorCol {
 			c.DrawRect(bx-1, heatmapBarTop+1, bw+2, heatmapBarH-2, ColCyan)
 		}
+	}
+}
+
+func (a *App) heatmapBarColor(idx int) uint16 {
+	if a.DiffMode && idx < len(a.DiffBins) {
+		switch a.DiffBins[idx].Class {
+		case rfml.DiffNewEmitter:
+			return ColRed
+		case rfml.DiffElevated:
+			return ColAmber
+		}
+	}
+	return ThermalColor(a.SweepRSSI[idx])
+}
+
+func (a *App) drawHeatmapDiffMarker(c *Canvas, idx, bx, bw int) {
+	if !a.DiffMode || idx >= len(a.DiffBins) {
+		return
+	}
+	switch a.DiffBins[idx].Class {
+	case rfml.DiffNewEmitter:
+		c.FillRect(bx, heatmapBarTop+2, bw, 2, ColRed)
+	case rfml.DiffElevated:
+		c.FillRect(bx, heatmapBarTop+2, bw, 2, ColAmber)
 	}
 }
 

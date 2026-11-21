@@ -131,8 +131,8 @@ func TestSmartSquelchAndAutoLock(t *testing.T) {
 		t.Fatal("expected SweepBaseline to be warmed up after 20 ticks")
 	}
 
-	// Band switch must reset baseline.
-	app.HandleKey(KeyBand)
+	// Band switch (5 BAND) must reset baseline.
+	app.HandleKey(KeyNav5)
 	if app.SweepBaseline.Ready(0) {
 		t.Fatal("expected SweepBaseline.Reset() on band change")
 	}

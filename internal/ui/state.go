@@ -115,15 +115,18 @@ type RadioState struct {
 	HasFreqOffset bool
 }
 
-// HeatmapState holds spectrum sweep buffers, peak-hold, cursor, and waterfall ring.
+// HeatmapState holds spectrum sweep buffers, peak-hold, cursor, waterfall ring, and EMI diff state.
 type HeatmapState struct {
-	CursorCol  int
-	SweepRSSI  [maxCols]int32
-	PeakHold   [maxCols]int32
-	Waterfall  [waterfallRows][maxCols]int32
-	WfHead     int
-	PeakFreqHz uint32
-	PeakDBm    int32
+	CursorCol      int
+	SweepRSSI      [maxCols]int32
+	PeakHold       [maxCols]int32
+	Waterfall      [waterfallRows][maxCols]int32
+	WfHead         int
+	PeakFreqHz     uint32
+	PeakDBm        int32
+	DiffMode       bool
+	ActiveBaseline *rfml.RoomBaseline
+	DiffBins       []rfml.DiffBin
 }
 
 // PulseState holds live RSSI oscilloscope history, RAW capture buffer, GDO0 RX worker, and decoded OOK keys.
@@ -208,14 +211,15 @@ type SourcesManageState struct {
 
 // SettingsState holds persisted opt-in settings, remote DB sync state, and SET tab cursor.
 type SettingsState struct {
-	ConfigPath  string
-	SourcesPath string
-	Settings    config.Settings
-	SettingsIdx int
-	Syncer      *dbsync.Syncer
-	SyncBusy    bool
-	syncCancel  context.CancelFunc
-	syncDoneCh  chan []dbsync.SyncReport
+	ConfigPath   string
+	SourcesPath  string
+	BaselinesDir string
+	Settings     config.Settings
+	SettingsIdx  int
+	Syncer       *dbsync.Syncer
+	SyncBusy     bool
+	syncCancel   context.CancelFunc
+	syncDoneCh   chan []dbsync.SyncReport
 }
 
 // ChromeState holds active screen mode, pause/help overlays, toast notification, and tick counter.

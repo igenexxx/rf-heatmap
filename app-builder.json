@@ -5,7 +5,7 @@
   "version": "0.2.0",
 
   "store": {
-    "summary": "CC1101 Sub-GHz waterfall, PulseNet-RF & SpectrumNet-2D ML, OOK/sensor decoder & .sub studio",
+    "summary": "CC1101 Sub-GHz waterfall, PulseNet-RF & SpectrumNet-2D ML & .sub studio",
     "description": "RF Heatmap turns your CardputerZero with Cap CC1101 into an on-device Sub-GHz spectrum and ML lab. Sweep 315/433/868/915 MHz with an Inferno thermal waterfall, EMI room diff, and real-time SpectrumNet-2D scene/RollJam alerts; classify 28 RF protocols and 32D transmitter fingerprints with Pure-Go INT8 PulseNet-RF; rescue distorted captures with 3-pass OOK + 1D-UNet AGC denoising; decode fixed/rolling codes, TPMS and weather sensors; run Foxhunt Geiger mode, RAW Trimmer, Auto-Probe, DB sync, and an opt-in stdio MCP server.",
     "icon": "assets/images/rf-heatmap-icon.png",
     "screenshots": [

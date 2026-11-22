@@ -5,8 +5,8 @@
   "version": "0.2.0",
 
   "store": {
-    "summary": "CC1101 Sub-GHz thermal waterfall, RSSI scope, OOK decoder and .sub studio",
-    "description": "RF Heatmap turns your CardputerZero with Cap CC1101 into a fast, intuitive Sub-GHz spectrum lab. Sweep 315, 433, 868, 915 MHz or all ISM bands with a live peak-hold bar graph and Inferno thermal waterfall, lock onto active bursts with one key, inspect pulses with an adjustable squelch oscilloscope, decode Princeton/CAME/Linear OOK frames, and manage Flipper-compatible .sub captures.",
+    "summary": "CC1101 Sub-GHz waterfall, PulseNet-RF & SpectrumNet-2D ML, OOK/sensor decoder & .sub studio",
+    "description": "RF Heatmap turns your CardputerZero with Cap CC1101 into an on-device Sub-GHz spectrum and ML lab. Sweep 315/433/868/915 MHz with an Inferno thermal waterfall, EMI room diff, and real-time SpectrumNet-2D scene/RollJam alerts; classify 28 RF protocols and 32D transmitter fingerprints with Pure-Go INT8 PulseNet-RF; rescue distorted captures with 3-pass OOK + 1D-UNet AGC denoising; decode fixed/rolling codes, TPMS and weather sensors; run Foxhunt Geiger mode, RAW Trimmer, Auto-Probe, DB sync, and an opt-in stdio MCP server.",
     "icon": "assets/images/rf-heatmap-icon.png",
     "screenshots": [
       "assets/screenshots/heatmap.png",
@@ -20,7 +20,7 @@
       "camera": false,
       "microphone": false,
       "imu": false,
-      "network": false,
+      "network": true,
       "additional_hardware": true,
       "background_service": false,
       "external_display": false

@@ -20,6 +20,9 @@ const (
 func (a *App) syncRXCapture() {
 	wantRX := a.Radio != nil && !a.TXBusy &&
 		((a.Mode == ModePulse && a.Recording) || (a.Mode == ModeDecode && !a.Paused) || (a.ShowSensors && !a.Paused))
+	if wantRX && a.rxActive && (a.rxFreq != a.ActiveFreq || a.rxPreset != a.Preset) {
+		a.stopRXCapture()
+	}
 	if wantRX && !a.rxActive {
 		a.startRXCapture()
 	} else if !wantRX && a.rxActive {
@@ -39,6 +42,8 @@ func (a *App) startRXCapture() {
 	a.rxCancel = cancel
 	a.rxDone = done
 	a.rxActive = true
+	a.rxFreq = a.ActiveFreq
+	a.rxPreset = a.Preset
 
 	freq, preset := a.ActiveFreq, a.Preset
 	go func() {

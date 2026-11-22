@@ -26,32 +26,34 @@ func TestClassifySignalClasses(t *testing.T) {
 	// 3. Noise (high glitch rate, random unstructured widths, low SNR).
 	noise := []int32{25, -40, 190, -15, 780, -30, 120, -20, 1450, -35, 95, -18, 620, -22, 310, -45, 980, -28}
 
-	// 4. Sensor / Weather (wide TE=800us, low duty cycle, 868.35 MHz).
-	sensor := []int32{-12000}
-	for i := range 24 {
-		if i%3 == 0 {
-			sensor = append(sensor, 600, -2200)
-		} else {
-			sensor = append(sensor, 600, -1200)
-		}
-	}
-	sensor = append(sensor, -12000)
-
-	// 5. Rolling / KeyFob (KeeLoq-like 66-bit + preamble = ~148 pulses/frame, 1:2 PWM, 433.92 MHz).
-	rolling := make([]int32, 0, 320)
+	// 4. Sensor / Weather (Oregon/LaCrosse-style 36-bit telemetry, 500us mark / 2000-4000us spaces, 868.35 MHz).
+	sensor := make([]int32, 0, 160)
 	for range 2 {
-		rolling = append(rolling, -15000)
-		for range 12 {
-			rolling = append(rolling, 400, -400)
-		}
-		for b := range 66 {
-			if (b*7+3)%2 == 0 {
-				rolling = append(rolling, 400, -800)
+		for i := range 36 {
+			if (i*5+1)%3 == 0 {
+				sensor = append(sensor, 500, -4000)
 			} else {
-				rolling = append(rolling, 800, -400)
+				sensor = append(sensor, 500, -2000)
 			}
 		}
+		sensor = append(sensor, 500, -9000)
 	}
+
+	// 5. Rolling / KeyFob (Microchip HCS301 KeeLoq: 11x preamble + 4000us header gap + 66-bit PWM payload).
+	rolling := make([]int32, 0, 180)
+	for range 11 {
+		rolling = append(rolling, 400, -400)
+	}
+	rolling = append(rolling, 400, -4000)
+	const keeloqKey uint64 = 0x1A2B3C4D5E6F7891
+	for b := range 66 {
+		if (keeloqKey>>uint(b%64))&1 == 1 {
+			rolling = append(rolling, 400, -800)
+		} else {
+			rolling = append(rolling, 800, -400)
+		}
+	}
+	rolling = append(rolling, 400, -15000)
 
 	tests := []struct {
 		name    string

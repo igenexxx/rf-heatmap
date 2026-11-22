@@ -55,10 +55,10 @@ func TestSettingsResetMLBaseline(t *testing.T) {
 
 func TestSavedPurgeNoiseTwoStepConfirmation(t *testing.T) {
 	dir := t.TempDir()
-	// Create a synthetic noise RAW capture (erratic high-jitter short spikes).
-	noisePulses := make([]int32, 0, 80)
-	for i := range 40 {
-		noisePulses = append(noisePulses, int32(45+(i*37)%290), -int32(55+(i*53)%310))
+	// Create a synthetic atmospheric EMI noise RAW capture (micro-glitches + erratic spikes).
+	noisePulses := []int32{
+		25, -40, 190, -15, 780, -30, 120, -20, 1450, -35, 95, -18, 620, -22, 310, -45,
+		30, -18, 940, -25, 42, -16, 1280, -28, 70, -19, 510, -34, 22, -48, 860, -21,
 	}
 	noiseSub := &subfile.SubFile{
 		FileType: "Flipper SubGhz RAW File", Version: 1, FreqHz: 433_920_000,

@@ -31,13 +31,17 @@ func (c SignalClass) String() string {
 	}
 }
 
-// Prediction holds the output of the on-device 12->24->5 MLP signal classifier.
+// Prediction holds the output of the on-device RF signal classifier (PulseNet INT8 + coarse fallback).
 type Prediction struct {
-	Class      SignalClass          `json:"class_id"`
-	Label      string               `json:"label"`
-	Confidence float32              `json:"confidence"`
-	Probs      [mlpOutputDim]float32 `json:"probs"`
-	IsNoise    bool                 `json:"is_noise"`
+	Class              SignalClass           `json:"class_id"`
+	Label              string                `json:"label"`
+	Confidence         float32               `json:"confidence"`
+	Probs              [mlpOutputDim]float32 `json:"probs"`
+	IsNoise            bool                  `json:"is_noise"`
+	FineClassID        uint16                `json:"fine_class_id,omitempty"`
+	ProtocolLabel      string                `json:"protocol_label,omitempty"`
+	ProtocolConfidence float32               `json:"protocol_confidence,omitempty"`
+	ModelVersion       uint32                `json:"model_version,omitempty"`
 }
 
 // Classify runs pure-Go zero-allocation MLP inference (12 -> 24 ReLU -> 5 Softmax).
@@ -121,8 +125,33 @@ func softmaxArgmax(logits *[mlpOutputDim]float32, maxLogit float32) ([mlpOutputD
 	return probs, bestIdx, bestProb
 }
 
-// ClassifyPulses extracts features from RAW_Data and runs MLP classification in one call.
+// ClassifyPulses extracts features/clusters from RAW_Data and runs PulseNet INT8 inference
+// (falling back to the legacy 12->24->5 MLP only when the pulse slice is empty or model unavailable).
 func ClassifyPulses(raw []int32, freqHz uint32, snrDB float64) (Prediction, FeatureVector, PulseClusters) {
+	return ClassifyPulsesWithPreset(raw, freqHz, "AM650", snrDB)
+}
+
+// ClassifyPulsesWithPreset runs PulseNet INT8 inference with explicit modulation preset conditioning.
+func ClassifyPulsesWithPreset(raw []int32, freqHz uint32, preset string, snrDB float64) (Prediction, FeatureVector, PulseClusters) {
 	feat, clusters := ExtractFeatures(raw, freqHz, snrDB)
+	if len(raw) == 0 {
+		return Classify(feat), feat, clusters
+	}
+	if m := defaultPulseNet(); m != nil {
+		ws := pulseWS.Get().(*PulseNetWorkspace)
+		res := m.Infer(ws, raw, freqHz, preset, snrDB)
+		pulseWS.Put(ws)
+		return Prediction{
+			Class:              res.CoarseClass,
+			Label:              res.CoarseClass.String(),
+			Confidence:         res.CoarseConfidence,
+			Probs:              res.CoarseProbs,
+			IsNoise:            res.CoarseClass == ClassNoise && res.CoarseConfidence >= 0.75,
+			FineClassID:        res.FineClassID,
+			ProtocolLabel:      res.ProtocolLabel,
+			ProtocolConfidence: res.ProtocolConfidence,
+			ModelVersion:       res.ModelVersion,
+		}, feat, clusters
+	}
 	return Classify(feat), feat, clusters
 }

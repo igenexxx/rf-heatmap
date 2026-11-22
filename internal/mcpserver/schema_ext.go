@@ -143,5 +143,6 @@ func (s *Server) extToolDefinitions() []toolDefinition {
 			},
 		},
 	}
-	return append(base, s.unlockToolDefinitions()...)
+	out := append(base, s.unlockToolDefinitions()...)
+	return append(out, s.mlNeuralToolDefinitions()...)
 }

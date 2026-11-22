@@ -305,6 +305,9 @@ func (s *Server) dispatchTool(name string, rawArgs json.RawMessage) (*toolCallRe
 		if res, err, ok := s.dispatchBaselineTool(name, rawArgs); ok {
 			return res, err
 		}
+		if res, err, ok := s.dispatchNeuralMLTool(name, rawArgs); ok {
+			return res, err
+		}
 		return nil, &rpcError{Code: errCodeInvalidParams, Message: fmt.Sprintf("unknown tool: %s", name)}
 	}
 }

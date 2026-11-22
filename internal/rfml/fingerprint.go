@@ -8,23 +8,14 @@ import (
 )
 
 const (
-	// EmbeddingDim is the dimensionality of an RF transmitter fingerprint.
-	EmbeddingDim = 8
+	// EmbeddingDim is the dimensionality of a learned PulseNet RF transmitter fingerprint.
+	EmbeddingDim = PulseNetEmbedDim
 
 	// MaxFreqDeltaHz is the carrier-frequency gate (±2.5 MHz) preventing cross-band false matches.
 	MaxFreqDeltaHz int64 = 2_500_000
 )
 
-// Embedding is an L2-normalized 8D RF transmitter fingerprint:
-//
-//	0: BandNorm      (315/433/868/915)
-//	1: ModType       (0.25=OOK/AM, 0.85=2-FSK/FM)
-//	2: ShortUsNorm   (TE/1500)
-//	3: LongUsNorm    (LongUs/3000)
-//	4: RatioNorm     (LongShortRatio/5)
-//	5: LogSyncUs     (log10(SyncUs+1)/5)
-//	6: FrameLenNorm  (pulsesPerFrame/180)
-//	7: DutyCycle     (0..1)
+// Embedding is an L2-normalized 32D learned RF transmitter fingerprint produced by PulseNet.
 type Embedding [EmbeddingDim]float32
 
 // FingerprintEntry represents one indexed known transmitter from a saved .sub file.
@@ -63,54 +54,83 @@ func (idx *FingerprintIndex) Len() int {
 	return len(idx.entries)
 }
 
-// ComputeEmbeddingFromRaw builds an L2-normalized 8D RF fingerprint from signed µs RAW_Data.
+// ComputeEmbeddingFromRaw builds an L2-normalized 32D RF fingerprint from signed µs RAW_Data
+// using PulseNet Head B (falling back to handcrafted normalization only if no model is loaded).
 func ComputeEmbeddingFromRaw(raw []int32, freqHz uint32, preset string) Embedding {
+	if len(raw) == 0 {
+		return Embedding{}
+	}
+	if m := defaultPulseNet(); m != nil {
+		ws := pulseWS.Get().(*PulseNetWorkspace)
+		res := m.Infer(ws, raw, freqHz, preset, 25)
+		pulseWS.Put(ws)
+		return res.Embedding
+	}
 	feat, _ := ExtractFeatures(raw, freqHz, 25)
 	var v Embedding
-	v[0] = feat[0]
-	v[1] = presetModType(preset)
-	v[2] = feat[2]
-	v[3] = feat[3]
-	v[4] = feat[4]
-	v[5] = feat[5]
-	v[6] = feat[8]
-	v[7] = feat[7]
+	v[0], v[1], v[2], v[3] = feat[0], presetModType(preset), feat[2], feat[3]
+	v[4], v[5], v[6], v[7] = feat[4], feat[5], feat[8], feat[7]
 	return normalizeEmbedding(v)
 }
 
-// ComputeEmbeddingFromKey synthesizes an 8D RF fingerprint from a Flipper Key .sub file
-// so live RAW captures can match saved decoded Key files without RAW_Data.
+// ComputeEmbeddingFromKey synthesizes canonical pulses from a Flipper Key .sub file and runs
+// the exact same PulseNet 32D encoder so live RAW captures match Key files in one shared manifold.
 func ComputeEmbeddingFromKey(freqHz uint32, preset, protocol string, bits, te int) Embedding {
+	synth := synthesizeCanonicalKeyPulses(protocol, bits, te)
+	return ComputeEmbeddingFromRaw(synth, freqHz, preset)
+}
+
+func synthesizeCanonicalKeyPulses(protocol string, bits, te int) []int32 {
 	if te <= 0 {
 		te = 350
 	}
 	if bits <= 0 {
 		bits = 24
 	}
-	ratio := 3.0
-	syncFactor := 30.0
-	if strings.EqualFold(protocol, "CAME") {
-		ratio = 2.0
-		syncFactor = 36.0
-	} else if strings.EqualFold(protocol, "KeeLoq") {
-		ratio = 2.0
-		syncFactor = 40.0
-	}
-	shortUs := float64(te)
-	longUs := shortUs * ratio
-	syncUs := shortUs * syncFactor
-	frameLen := float64(bits * 2)
+	t := int32(te)
+	n := min(bits, 66)
+	p := strings.ToLower(protocol)
+	out := make([]int32, 0, min(PulseNetSeqLen, n*4+40))
 
-	var v Embedding
-	v[0] = float32(normalizeBand(freqHz))
-	v[1] = presetModType(preset)
-	v[2] = clamp32(shortUs / 1500.0)
-	v[3] = clamp32(longUs / 3000.0)
-	v[4] = clamp32(ratio / 5.0)
-	v[5] = clamp32(math.Log10(syncUs+1.0) / 5.0)
-	v[6] = clamp32(frameLen / 180.0)
-	v[7] = 0.45 // Typical OOK PWM duty cycle
-	return normalizeEmbedding(v)
+	switch {
+	case strings.Contains(p, "came") || strings.Contains(p, "nice"):
+		for range 2 {
+			out = append(out, -t*36, t)
+			for i := range n {
+				if (0xAAAAAA>>uint(i%24))&1 == 1 {
+					out = append(out, -2*t, t)
+				} else {
+					out = append(out, -t, 2*t)
+				}
+			}
+		}
+	case strings.Contains(p, "keeloq"):
+		for range 11 {
+			out = append(out, t, -t)
+		}
+		out = append(out, t, -10*t)
+		for i := range n {
+			if (i*7+3)%2 == 0 {
+				out = append(out, t, -2*t)
+			} else {
+				out = append(out, 2*t, -t)
+			}
+		}
+		out = append(out, t, -15*t)
+	default: // Princeton / EV1527 / Linear 1:3 PWM
+		for range 2 {
+			out = append(out, -t*30)
+			for i := n - 1; i >= 0; i-- {
+				if (0xAAAAAA>>uint(i%24))&1 == 1 {
+					out = append(out, 3*t, -t)
+				} else {
+					out = append(out, t, -3*t)
+				}
+			}
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // CosineSimilarity returns the cosine similarity in [0, 1] between two L2-normalized embeddings.

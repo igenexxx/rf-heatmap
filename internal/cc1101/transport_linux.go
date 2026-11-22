@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -41,6 +42,7 @@ type spiIOCTransfer struct {
 
 // LinuxTransport implements Transport using /dev/spidev0.1, /dev/gpiochip0, and ext_5v_out.
 type LinuxTransport struct {
+	spiMu       sync.Mutex
 	spiFile     *os.File
 	speedHz     uint32
 	rfSwPin     int
@@ -86,6 +88,8 @@ func (lt *LinuxTransport) Transfer(tx []byte) ([]byte, error) {
 	if len(tx) == 0 {
 		return nil, nil
 	}
+	lt.spiMu.Lock()
+	defer lt.spiMu.Unlock()
 	rx := make([]byte, len(tx))
 	tr := spiIOCTransfer{
 		txBuf:       uint64(uintptr(unsafe.Pointer(&tx[0]))),

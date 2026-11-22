@@ -112,7 +112,11 @@ func (a *App) analyzeCapturedRaw() {
 
 func (a *App) stepLiveChannel() {
 	if a.Radio != nil {
-		_ = a.Radio.StartReceive(a.ActiveFreq)
+		// Never strobe SIDLE/StartReceive while live GDO0 RX capture is active,
+		// otherwise continuous pulse reception is interrupted every 55 ms tick.
+		if !a.rxActive {
+			_ = a.Radio.StartReceive(a.ActiveFreq)
+		}
 		if v, err := a.Radio.ReadRSSIDBm(); err == nil {
 			a.LiveRSSI = v
 		}

@@ -183,6 +183,7 @@ func (a *App) stepHeatmap() {
 	}
 	a.updateSweepBaseline(freqs, n)
 	a.updateHeatmapDiff(n)
+	a.updateSpectrumScene(n)
 }
 
 func (a *App) sampleChannelRSSI(freqHz uint32, idx, n int) int32 {
@@ -253,6 +254,7 @@ func (a *App) drawHeatmap(c *Canvas) {
 	a.drawHeatmapInfoStrip(c, band)
 	a.drawHeatmapBars(c, n)
 	a.drawHeatmapWaterfall(c, n)
+	a.drawHeatmapSpectrumBadge(c)
 }
 
 func (a *App) drawHeatmapInfoStrip(c *Canvas, band BandPreset) {
@@ -282,7 +284,6 @@ func (a *App) drawHeatmapBars(c *Canvas, n int) {
 	for i := range n {
 		bx := heatmapChartX + i*colW + 1
 		bw := max(2, colW-2)
-
 		if h := rssiToHeight(a.SweepRSSI[i], heatmapBarH-4); h > 0 {
 			c.FillRect(bx, heatmapBarTop+heatmapBarH-2-h, bw, h, a.heatmapBarColor(i))
 		}

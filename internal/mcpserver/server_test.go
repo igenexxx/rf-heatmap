@@ -229,12 +229,14 @@ func TestJSONRPCProtocolHandshakeAndErrors(t *testing.T) {
 	if _, ok := resps[2]["result"].(map[string]any); !ok {
 		t.Fatalf("ping result missing: %+v", resps[2])
 	}
-	// 3: tools/list has all 37 tools
+	// 3: tools/list has all 39 tools
 	tools := resps[3]["result"].(map[string]any)["tools"].([]any)
-	if len(tools) != 37 {
-		t.Fatalf("tools/list count = %d, want 37", len(tools))
+	if len(tools) != 39 {
+		t.Fatalf("tools/list count = %d, want 39", len(tools))
 	}
 	wantTools := map[string]bool{
+		"rf_model_info":           false,
+		"rf_classify_spectrum":    false,
 		"rf_get_status":           false,
 		"rf_sweep_band":           false,
 		"rf_read_rssi":            false,
@@ -728,4 +730,52 @@ func TestConcurrentRadioToolCallsRaceSafe(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestPulseNetAndSpectrumMCPTools(t *testing.T) {
+	srv := NewServer(Options{
+		CapturesDir:    t.TempDir(),
+		ExtraSavedDirs: []string{},
+		Settings:       config.DefaultSettings(),
+		SettleDelay:    0,
+	})
+
+	infoRes, isErr, rpcErr := callTool(t, srv, "rf_model_info", map[string]any{})
+	if isErr || rpcErr != nil {
+		t.Fatalf("rf_model_info failed: isErr=%v rpcErr=%+v", isErr, rpcErr)
+	}
+	pulseInfo, ok := infoRes["pulsenet_rf"].(map[string]any)
+	if !ok || pulseInfo["source"] != "embedded" {
+		t.Fatalf("unexpected pulsenet_rf info: %+v", infoRes)
+	}
+	specInfo, ok := infoRes["spectrumnet"].(map[string]any)
+	if !ok || specInfo["source"] != "embedded" {
+		t.Fatalf("unexpected spectrumnet info: %+v", infoRes)
+	}
+
+	// Build a 32x36 CW Jammer waterfall to verify rf_classify_spectrum.
+	wf := make([][]int, 32)
+	for r := range 32 {
+		row := make([]int, 36)
+		for c := range 36 {
+			row[c] = -104
+		}
+		row[18] = -48
+		row[17] = -72
+		row[19] = -72
+		wf[r] = row
+	}
+	specRes, isErr, rpcErr := callTool(t, srv, "rf_classify_spectrum", map[string]any{"waterfall_dbm": wf})
+	if isErr || rpcErr != nil {
+		t.Fatalf("rf_classify_spectrum failed: isErr=%v rpcErr=%+v", isErr, rpcErr)
+	}
+	pred, ok := specRes["prediction"].(map[string]any)
+	if !ok || pred["label"] != "CW_Jammer" || pred["is_alert"] != true {
+		t.Fatalf("expected CW_Jammer alert, got %+v", specRes)
+	}
+
+	// Empty waterfall must return tool error cleanly.
+	if _, isErr, _ := callTool(t, srv, "rf_classify_spectrum", map[string]any{"waterfall_dbm": [][]int{}}); !isErr {
+		t.Fatal("expected tool error for empty waterfall")
+	}
 }

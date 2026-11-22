@@ -15,6 +15,7 @@ type DecodedKey struct {
 	KeyHex       string `json:"key_hex"`
 	TE           int    `json:"te_us"`
 	Denoised     bool   `json:"denoised,omitempty"`
+	DenoisedBy   string `json:"denoised_by,omitempty"`
 	IsRolling    bool   `json:"is_rolling,omitempty"`
 	SerialHex    string `json:"serial_hex,omitempty"`
 	EncryptedHex string `json:"encrypted_hex,omitempty"`
@@ -64,16 +65,35 @@ func decodeOOKStrict(pulses []int32) (DecodedKey, bool) {
 
 func decodeOOKWithDenoise(pulses []int32) (DecodedKey, bool) {
 	cl := rfml.ClusterTimings(pulses, rfml.DefaultMinGlitchUs)
-	if !cl.Valid || cl.LongShortRatio < 1.5 || cl.LongShortRatio > 5.0 {
-		return DecodedKey{}, false
+	if cl.Valid && cl.LongShortRatio >= 1.5 && cl.LongShortRatio <= 5.0 {
+		q := rfml.QuantizePulses(pulses, cl, rfml.DefaultMinGlitchUs)
+		if len(q) >= minOOKPulses {
+			if k, ok := decodeOOKStrict(q); ok {
+				k.Denoised = true
+				k.DenoisedBy = "kmeans"
+				return k, true
+			}
+		}
 	}
-	q := rfml.QuantizePulses(pulses, cl, rfml.DefaultMinGlitchUs)
-	if len(q) < minOOKPulses {
-		return DecodedKey{}, false
-	}
-	if k, ok := decodeOOKStrict(q); ok {
-		k.Denoised = true
-		return k, true
+	// Pass 3: Lazy PulseNet 1D-UNet asymmetric AGC denoiser rescue.
+	if cleaned, _, ok := rfml.DenoisePulsesNeural(pulses, 433_920_000, "AM650", 25); ok && len(cleaned) >= minOOKPulses {
+		if k, decOK := decodeOOKStrict(cleaned); decOK {
+			k.Denoised = true
+			k.DenoisedBy = "pulsenet"
+			return k, true
+		}
+		// Snap residual jitter after asymmetric AGC correction.
+		cl2 := rfml.ClusterTimings(cleaned, rfml.DefaultMinGlitchUs)
+		if cl2.Valid && cl2.LongShortRatio >= 1.5 && cl2.LongShortRatio <= 5.0 {
+			q2 := rfml.QuantizePulses(cleaned, cl2, rfml.DefaultMinGlitchUs)
+			if len(q2) >= minOOKPulses {
+				if k, decOK := decodeOOKStrict(q2); decOK {
+					k.Denoised = true
+					k.DenoisedBy = "pulsenet"
+					return k, true
+				}
+			}
+		}
 	}
 	return DecodedKey{}, false
 }

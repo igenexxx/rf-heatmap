@@ -142,6 +142,8 @@ type PulseState struct {
 	rxCancel     context.CancelFunc
 	rxDone       chan struct{}
 	rxActive     bool
+	rxFreq       uint32
+	rxPreset     cc1101.Preset
 }
 
 // MLState holds on-device RF ML baselines, anomaly/cluster/MLP/fingerprint/foxhunt state.
@@ -155,6 +157,8 @@ type MLState struct {
 	LastCluster          rfml.PulseClusters
 	LastPrediction       rfml.Prediction
 	HasPrediction        bool
+	LastSpectrum         rfml.SpectrumPrediction
+	HasSpectrum          bool
 	FPIndex              *rfml.FingerprintIndex
 	LastMatch            rfml.MatchResult
 	HasMatch             bool

@@ -104,7 +104,13 @@ func (a *App) drawDecodeBanner(c *Canvas) {
 		if a.LastPrediction.IsNoise {
 			predCol = ColAmber
 		}
-		c.DrawText(12, 26, fmt.Sprintf("ML: %s (%.0f%%)", a.LastPrediction.Label, a.LastPrediction.Confidence*100), predCol, 1)
+		label := a.LastPrediction.Label
+		conf := a.LastPrediction.Confidence
+		if a.LastPrediction.ProtocolLabel != "" && !a.LastPrediction.IsNoise {
+			label = a.LastPrediction.ProtocolLabel
+			conf = a.LastPrediction.ProtocolConfidence
+		}
+		c.DrawText(12, 26, fmt.Sprintf("ML: %s (%.0f%%)", truncate(label, 22), conf*100), predCol, 1)
 		c.DrawText(12, 41, fmt.Sprintf("TE:%.0fus  LONG:%.0fus  JIT:%.0f%%  GL:%d",
 			a.LastCluster.ShortUs, a.LastCluster.LongUs, a.LastCluster.JitterRatio*100, a.LastCluster.GlitchesRemoved), ColMuted, 1)
 		return
@@ -135,9 +141,13 @@ func (a *App) drawDecodedBannerContent(c *Canvas, d *subfile.DecodedKey) {
 		mlX = 180
 	}
 	if d.Denoised {
+		cleanTag := "ML-CLEAN"
+		if d.DenoisedBy == "pulsenet" {
+			cleanTag = "PN-CLEAN"
+		}
 		c.FillRect(mlX, 24, 64, 11, ColPanelAlt)
 		c.DrawRect(mlX, 24, 64, 11, ColMagenta)
-		c.DrawTextCentered(mlX+32, 26, "ML-CLEAN", ColMagenta, 1)
+		c.DrawTextCentered(mlX+32, 26, cleanTag, ColMagenta, 1)
 	}
 	if rolling {
 		c.DrawText(12, 40, formatRollingBannerLine(d, a.LastRolling), ColText, 1)

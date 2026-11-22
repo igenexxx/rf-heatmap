@@ -2,7 +2,7 @@
   "app_name": "RF Heatmap",
   "package_name": "rf-heatmap",
   "bin_name": "rf-heatmap",
-  "version": "0.1.0",
+  "version": "0.2.0",
 
   "store": {
     "summary": "CC1101 Sub-GHz thermal waterfall, RSSI scope, OOK decoder and .sub studio",

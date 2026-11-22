@@ -49,7 +49,7 @@ go test -race ./...
 ./scripts/build_deb.sh
 ```
 
-This produces `dist/rf-heatmap_0.1.0-1_arm64.deb` ready for installation (`sudo dpkg -i`) or publishing via `czdev publish --deb dist/rf-heatmap_0.1.0-1_arm64.deb`.
+This produces `dist/rf-heatmap_0.2.0-1_arm64.deb` ready for installation (`sudo dpkg -i`) or publishing via `czdev publish --deb dist/rf-heatmap_0.2.0-1_arm64.deb`.
 
 ## Built-In MCP Server (SSH Opt-In)
 

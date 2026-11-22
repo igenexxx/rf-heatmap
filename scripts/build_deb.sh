@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PKG="rf-heatmap"
-VER="0.1.0"
+VER="0.2.0"
 REV="1"
 ARCH="arm64"
 DEB_NAME="${PKG}_${VER}-${REV}_${ARCH}.deb"

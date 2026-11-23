@@ -38,7 +38,7 @@ func TestMapLinuxKeyCode(t *testing.T) {
 		code uint16
 		want KeyAction
 	}{
-		{codeEsc, KeyQuit},
+		{codeEsc, KeyBack},
 		{codeQ, KeyQuit},
 		{codeF, KeyUp},
 		{codeX, KeyDown},
@@ -62,12 +62,14 @@ func TestMapLinuxKeyCode(t *testing.T) {
 
 func TestAppStateTransitions(t *testing.T) {
 	app := NewApp(nil, t.TempDir())
-	if app.Mode != ModeHeatmap || !app.SimMode {
-		t.Fatalf("unexpected initial app state: %+v", app)
+	if app.Mode != ModeHome || !app.SimMode {
+		t.Fatalf("unexpected initial app state: mode=%v sim=%v", app.Mode, app.SimMode)
 	}
+	app.Settings.ExpertMode = true
+	app.SwitchMode(ModeHeatmap)
 	app.Step()
 
-	// Tab cycles through all 4 modes.
+	// Tab cycles through Expert modes.
 	app.HandleKey(KeyTab)
 	if app.Mode != ModePulse {
 		t.Fatalf("expected ModePulse, got %v", app.Mode)
@@ -83,10 +85,8 @@ func TestAppStateTransitions(t *testing.T) {
 	if app.Mode != ModeDecode {
 		t.Fatalf("expected ModeDecode, got %v", app.Mode)
 	}
-	app.HandleKey(KeyTab)
-	if app.Mode != ModeSaved {
-		t.Fatalf("expected ModeSaved, got %v", app.Mode)
-	}
+	app.SwitchMode(ModeSaved)
+	app.refreshSavedFiles()
 	if len(app.SavedFiles) == 0 {
 		t.Fatal("expected saved .sub file to appear in ModeSaved")
 	}
@@ -116,6 +116,8 @@ func TestAppStateTransitions(t *testing.T) {
 
 func TestSmartSquelchAndAutoLock(t *testing.T) {
 	app := NewApp(nil, t.TempDir())
+	app.Settings.ExpertMode = true
+	app.SwitchMode(ModeHeatmap)
 	if !app.AutoSquelch || !app.AutoLock {
 		t.Fatalf("expected AutoSquelch and AutoLock enabled by default")
 	}
@@ -186,31 +188,21 @@ func TestSettingsModeAndPersistence(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	app := NewApp(nil, t.TempDir())
 	app.SetConfigPath(cfgPath)
+	app.Settings.ExpertMode = true
+	app.SwitchMode(ModeSettings)
 
-	// Tab through all 6 modes: HEATMAP -> PULSE -> DECODE -> SAVED -> PROBE -> SET -> HEATMAP.
-	wantModes := []Mode{ModePulse, ModeDecode, ModeSaved, ModeProbe, ModeSettings, ModeHeatmap}
-	for _, want := range wantModes {
-		app.HandleKey(KeyTab)
-		if app.Mode != want {
-			t.Fatalf("expected mode %v, got %v", want, app.Mode)
-		}
-	}
 	if ModeSettings.String() != "SET" {
 		t.Fatalf("ModeSettings.String() = %q, want SET", ModeSettings.String())
 	}
 
-	// Jump to SET via KeyNav8 cycling.
-	for app.Mode != ModeSettings {
-		app.HandleKey(KeyNav8)
-	}
-
-	// Row 0: toggle MCP Server ON and verify auto-save.
+	// Row 1 in Expert Mode: toggle MCP Server ON and verify auto-save.
 	if app.Settings.MCPEnabled {
 		t.Fatal("MCPEnabled should default to false")
 	}
+	app.HandleKey(KeyDown) // row 1: MCP Server
 	app.HandleKey(KeyEnter)
 	if !app.Settings.MCPEnabled {
-		t.Fatal("expected MCPEnabled=true after Enter on row 0")
+		t.Fatal("expected MCPEnabled=true after Enter on row 1")
 	}
 	loaded, err := config.Load(cfgPath)
 	if err != nil || !loaded.MCPEnabled {
@@ -221,30 +213,30 @@ func TestSettingsModeAndPersistence(t *testing.T) {
 	c, _ := NewCanvas("")
 	app.Render(c)
 
-	// Row 1: Auto Squelch toggle.
+	// Row 2: Auto Squelch toggle.
 	app.HandleKey(KeyDown)
-	if app.SettingsIdx != 1 {
-		t.Fatalf("SettingsIdx = %d, want 1", app.SettingsIdx)
+	if app.SettingsIdx != 2 {
+		t.Fatalf("SettingsIdx = %d, want 2", app.SettingsIdx)
 	}
 	app.HandleKey(KeySpace)
 	if app.AutoSquelch || app.Settings.AutoSquelch {
 		t.Fatal("expected AutoSquelch=false after toggle")
 	}
 
-	// Row 2: Auto-Lock toggle.
+	// Row 3: Auto-Lock toggle.
 	app.HandleKey(KeyDown)
 	app.HandleKey(KeyNav4)
 	if app.AutoLock || app.Settings.AutoLock {
 		t.Fatal("expected AutoLock=false after toggle")
 	}
 
-	// Row 3: Squelch K step & wrap 2.0..6.0, plus Left/Right.
+	// Row 4: Squelch K step & wrap 2.0..6.0, plus Left/Right.
 	app.HandleKey(KeyDown)
-	if app.SettingsIdx != 3 {
-		t.Fatalf("SettingsIdx = %d, want 3", app.SettingsIdx)
+	if app.SettingsIdx != 4 {
+		t.Fatalf("SettingsIdx = %d, want 4", app.SettingsIdx)
 	}
 	// Step past 6.0 to wrap back to 2.0.
-	app.ApplySettings(config.Settings{MCPEnabled: true, AutoSquelch: true, AutoLock: true, SquelchK: 6.0})
+	app.ApplySettings(config.Settings{MCPEnabled: true, ExpertMode: true, AutoSquelch: true, AutoLock: true, SquelchK: 6.0})
 	app.HandleKey(KeyNav4)
 	if app.Settings.SquelchK != config.MinSquelchK {
 		t.Fatalf("expected SquelchK wrap to %.1f, got %.1f", config.MinSquelchK, app.Settings.SquelchK)
@@ -265,25 +257,25 @@ func TestSettingsModeAndPersistence(t *testing.T) {
 		t.Fatalf("explicit save failed: loaded=%+v err=%v", loaded, err)
 	}
 
-	// Reset to defaults (KeyNav6) -> MCPEnabled must be false again.
+	// Reset to defaults (KeyNav6 in Expert Mode) -> MCPEnabled must be false again.
 	app.HandleKey(KeyNav6)
 	if app.Settings.MCPEnabled || !app.AutoSquelch || !app.AutoLock || app.Settings.SquelchK != config.DefaultSquelchK {
 		t.Fatalf("expected defaults restored, got %+v", app.Settings)
 	}
 	app.Render(c)
 
-	// Help button (KeyNav7).
+	// Help button (KeyNav7 in Expert Mode).
+	app.Settings.ExpertMode = true
 	app.HandleKey(KeyNav7)
 	if !app.ShowHelp {
-		t.Fatal("expected KeyNav7 in ModeSettings to open Help modal")
+		t.Fatal("expected KeyNav7 in Expert ModeSettings to open Help modal")
 	}
 	app.HandleKey(KeyEnter) // close help
 
 	// Move cursor back up to 0.
-	app.HandleKey(KeyUp)
-	app.HandleKey(KeyUp)
-	app.HandleKey(KeyUp)
-	app.HandleKey(KeyUp) // clamp at 0
+	for range 6 {
+		app.HandleKey(KeyUp)
+	}
 	if app.SettingsIdx != 0 {
 		t.Fatalf("expected SettingsIdx=0, got %d", app.SettingsIdx)
 	}

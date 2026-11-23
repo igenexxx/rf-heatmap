@@ -17,6 +17,8 @@ import (
 // App coordinates all UI views, embedded domain state sub-structs, and radio interaction.
 type App struct {
 	RadioState
+	HomeState
+	ReadWizardState
 	HeatmapState
 	PulseState
 	MLState
@@ -88,7 +90,7 @@ func NewApp(radio *cc1101.Radio, capturesDir string) *App {
 			syncDoneCh:   make(chan []dbsync.SyncReport, 1),
 		},
 		ChromeState: ChromeState{
-			Mode: ModeHeatmap,
+			Mode: ModeHome,
 		},
 		RollingState: RollingState{
 			RollingDetector: subfile.NewRollingDetector(),
@@ -189,6 +191,27 @@ func (a *App) EffectiveSquelchDBm() int32 {
 	return a.SquelchDBm
 }
 
+// SwitchMode activates mode m and clears transient confirmation states.
+func (a *App) SwitchMode(m Mode) {
+	if a.Mode == ModeProbe && m != ModeProbe {
+		a.stopActiveProbe()
+	}
+	a.Mode = m % modeCount
+	a.ConfirmExit = false
+	a.ReadNoiseWarn = false
+	a.ReadRollWarn = false
+}
+
+func (a *App) goHome() {
+	a.stopActiveProbe()
+	a.Recording = false
+	a.ShowFoxhunt = false
+	a.ShowTrimmer = false
+	a.ShowSensors = false
+	a.ShowSources = false
+	a.SwitchMode(ModeHome)
+}
+
 // HandleKey processes a single KeyAction and returns true if the app should exit.
 func (a *App) HandleKey(act KeyAction) bool {
 	if act == KeyHelp {
@@ -216,6 +239,13 @@ func (a *App) HandleKey(act KeyAction) bool {
 		a.handleSensorsKey(act)
 		return false
 	}
+	if act == KeyQuit {
+		a.stopActiveProbe()
+		return true
+	}
+	if a.Mode == ModeHome {
+		return a.handleHomeKey(act)
+	}
 	if a.handleGlobalKey(act) {
 		return true
 	}
@@ -230,28 +260,36 @@ func (a *App) handleHelpKey(act KeyAction) {
 		a.HelpPage = (a.HelpPage + n - 1) % n
 	case KeyRight, KeyDown, KeySpace, KeyTab, KeyNav5:
 		a.HelpPage = (a.HelpPage + 1) % n
-	case KeyQuit, KeyEnter, KeyNav4, KeyNav8:
+	case KeyQuit, KeyBack, KeyEnter, KeyNav4, KeyNav8:
 		a.ShowHelp = false
 	}
 }
 
 func (a *App) handleGlobalKey(act KeyAction) bool {
 	switch act {
-	case KeyQuit:
-		a.stopActiveProbe()
-		return true
-	case KeyTab, KeyNav8:
-		if a.Mode == ModeProbe {
-			a.stopActiveProbe()
+	case KeyBack:
+		if a.Mode == ModeRead {
+			return false
 		}
-		a.Mode = (a.Mode + 1) % modeCount
-		if a.Mode == ModeSaved {
-			a.refreshSavedFiles()
-		} else if a.Mode == ModeProbe {
-			a.refreshProbePacks()
+		a.goHome()
+		return false
+	case KeyTab:
+		if !a.Settings.ExpertMode {
+			a.goHome()
+			return false
 		}
+		a.cycleExpertModeTab()
+	case KeyNav8:
+		if a.Mode == ModeRead || a.Mode == ModeSettings {
+			return false
+		}
+		if !a.Settings.ExpertMode {
+			a.goHome()
+			return false
+		}
+		a.cycleExpertModeTab()
 	case KeyBand:
-		if a.Mode == ModeHeatmap {
+		if a.Mode == ModeHeatmap || a.Mode == ModeRead {
 			return false
 		}
 		if a.Mode == ModeProbe && a.cycleProbeGenFreq() {
@@ -259,6 +297,9 @@ func (a *App) handleGlobalKey(act KeyAction) bool {
 		}
 		a.cycleBand()
 	case KeyMod:
+		if a.Mode == ModeRead {
+			return false
+		}
 		a.cyclePreset()
 		if a.Mode == ModeProbe {
 			a.syncProbeGenPreset()
@@ -269,6 +310,19 @@ func (a *App) handleGlobalKey(act KeyAction) bool {
 		a.toggleAutoLock()
 	}
 	return false
+}
+
+func (a *App) cycleExpertModeTab() {
+	next := (a.Mode + 1) % modeCount
+	if next == ModeHome {
+		next = ModeHeatmap
+	}
+	a.SwitchMode(next)
+	if a.Mode == ModeSaved {
+		a.refreshSavedFiles()
+	} else if a.Mode == ModeProbe {
+		a.refreshProbePacks()
+	}
 }
 
 func (a *App) toggleAutoSquelch() {
@@ -293,6 +347,8 @@ func (a *App) toggleAutoLock() {
 
 func (a *App) dispatchModeKey(act KeyAction) {
 	switch a.Mode {
+	case ModeRead:
+		a.handleReadKey(act)
 	case ModeHeatmap:
 		a.handleHeatmapKey(act)
 	case ModePulse:
@@ -356,6 +412,10 @@ func (a *App) Step() {
 		return
 	}
 	switch a.Mode {
+	case ModeRead:
+		if !a.ReadCaptured {
+			a.stepReadWizard()
+		}
 	case ModeHeatmap:
 		a.stepHeatmap()
 	case ModePulse, ModeDecode:
@@ -373,7 +433,7 @@ func (a *App) Render(c *Canvas) {
 	switch {
 	case a.ShowFoxhunt:
 		a.drawFoxhunt(c)
-		a.drawNavBar(c, [5]string{"RST PK", "MUTE", "BAND", "MOD", "BACK"})
+		a.drawNavBar(c, [5]string{"RSTPK", "MUTE", "BAND", "MOD", "BACK"})
 	case a.ShowTrimmer:
 		a.drawTrimmer(c)
 		a.drawNavBar(c, [5]string{"HDL", "AUTO", "TX", "SAVE", "BACK"})
@@ -392,9 +452,19 @@ func (a *App) Render(c *Canvas) {
 
 func (a *App) renderModeView(c *Canvas) {
 	switch a.Mode {
+	case ModeHome:
+		a.drawHome(c)
+		a.drawNavBar(c, a.homeNavLabels())
+	case ModeRead:
+		a.drawRead(c)
+		a.drawNavBar(c, a.readNavLabels())
 	case ModeHeatmap:
 		a.drawHeatmap(c)
-		a.drawNavBar(c, [5]string{pauseLabel(a.Paused), "BAND", "LOCK", "MOD", "MODE"})
+		if a.Settings.ExpertMode {
+			a.drawNavBar(c, [5]string{pauseLabel(a.Paused), "BAND", "LOCK", "MOD", "MODE"})
+		} else {
+			a.drawNavBar(c, [5]string{pauseLabel(a.Paused), "BAND", "LOCK", "FOX", "MENU"})
+		}
 	case ModePulse:
 		a.drawPulse(c)
 		a.drawNavBar(c, [5]string{recLabel(a.Recording), "TX", "SAVE", "MOD", "MODE"})
@@ -403,17 +473,25 @@ func (a *App) renderModeView(c *Canvas) {
 		a.drawNavBar(c, [5]string{pauseLabel(a.Paused), "TX", "SAVE", "CLR", "MODE"})
 	case ModeSaved:
 		a.drawSaved(c)
-		a.drawNavBar(c, [5]string{"TX", "LOAD", "DEL", "PURGE", "MODE"})
+		if a.Settings.ExpertMode {
+			a.drawNavBar(c, [5]string{"TX", "LOAD", "DEL", "PURGE", "MODE"})
+		} else {
+			a.drawNavBar(c, [5]string{"SEND", "TRIM", "NEW", "DEL", "MENU"})
+		}
 	case ModeProbe:
 		a.drawProbe(c)
 		a.drawNavBar(c, a.probeNavLabels())
 	case ModeSettings:
 		if a.ShowSources {
 			a.drawSourcesManage(c)
-			a.drawNavBar(c, [5]string{"ON/OFF", "DIR", "ALL", "SYNC", "BACK"})
+			a.drawNavBar(c, [5]string{"ON/OF", "DIR", "ALL", "SYNC", "BACK"})
 		} else {
 			a.drawSettings(c)
-			a.drawNavBar(c, [5]string{"TOGGLE", "SAVE", "RESET", "HELP", "MODE"})
+			if a.Settings.ExpertMode {
+				a.drawNavBar(c, [5]string{"TOGL", "SAVE", "RST", "HELP", "MENU"})
+			} else {
+				a.drawNavBar(c, [5]string{"TOGL", "SAVE", "SYNC", "", "MENU"})
+			}
 		}
 	}
 }

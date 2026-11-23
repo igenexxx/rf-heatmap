@@ -37,7 +37,12 @@ func (a *App) handleHeatmapKey(act KeyAction) {
 	case KeyNav6, KeyEnter:
 		a.lockPeakOrCursor(freqs)
 	case KeyNav7:
-		a.cyclePreset()
+		if a.Settings.ExpertMode {
+			a.cyclePreset()
+		} else {
+			a.ActiveFreq = freqs[a.CursorCol]
+			a.EnterFoxhunt(ModeHeatmap)
+		}
 	case KeyBand:
 		a.captureRoomBaseline()
 	case KeyMark:
@@ -155,7 +160,11 @@ func (a *App) lockPeakOrCursor(freqs []uint32) {
 	if a.LiveBaseline != nil {
 		a.LiveBaseline.Reset()
 	}
-	a.Mode = ModePulse
+	if a.Settings.ExpertMode {
+		a.SwitchMode(ModePulse)
+	} else {
+		a.enterReadWizardLocked(a.ActiveFreq)
+	}
 	a.SetToast(fmt.Sprintf("Locked %.2f MHz", float64(a.ActiveFreq)/1e6))
 }
 

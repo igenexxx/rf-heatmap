@@ -66,7 +66,7 @@ func (a *App) ExitTrimmer() {
 
 func (a *App) handleTrimmerKey(act KeyAction) {
 	switch act {
-	case KeyQuit, KeyNav8:
+	case KeyQuit, KeyBack, KeyNav8:
 		a.ExitTrimmer()
 	case KeyNav4:
 		a.EditEnd = !a.EditEnd

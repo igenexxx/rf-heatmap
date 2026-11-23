@@ -13,7 +13,7 @@ func TestSettingsTXPowerSelectorAndPersistence(t *testing.T) {
 	defer app.Close()
 	app.SetConfigPath(cfgPath)
 	app.Mode = ModeSettings
-	app.SettingsIdx = 7 // TX Power (PATABLE)
+	app.SettingsIdx = 1 // TX Power in Simple Mode (row 1)
 
 	if app.Settings.TXPowerDBm != config.DefaultTXPowerDBm {
 		t.Fatalf("default TXPowerDBm = %d, want %d", app.Settings.TXPowerDBm, config.DefaultTXPowerDBm)

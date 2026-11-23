@@ -44,7 +44,7 @@ func (a *App) ExitFoxhunt() {
 
 func (a *App) handleFoxhuntKey(act KeyAction) {
 	switch act {
-	case KeyQuit, KeyNav8:
+	case KeyQuit, KeyBack, KeyNav8:
 		a.ExitFoxhunt()
 	case KeyNav4:
 		if a.Tracker != nil {

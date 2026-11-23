@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"time"
 
 	"rf-heatmap/internal/cc1101"
 	"rf-heatmap/internal/sensors"
@@ -19,7 +20,10 @@ const (
 // and never collide with GDO0 TX.
 func (a *App) syncRXCapture() {
 	wantRX := a.Radio != nil && !a.TXBusy &&
-		((a.Mode == ModePulse && a.Recording) || (a.Mode == ModeDecode && !a.Paused) || (a.ShowSensors && !a.Paused))
+		((a.Mode == ModeRead && !a.ReadCaptured && (!a.ReadAutoScan || a.ReadAutoLocked || a.Recording)) ||
+			(a.Mode == ModePulse && a.Recording) ||
+			(a.Mode == ModeDecode && !a.Paused) ||
+			(a.ShowSensors && !a.Paused))
 	if wantRX && a.rxActive && (a.rxFreq != a.ActiveFreq || a.rxPreset != a.Preset) {
 		a.stopRXCapture()
 	}
@@ -81,10 +85,18 @@ func (a *App) drainRXPulses() {
 			}
 			got++
 		default:
+			if got > 0 && a.Mode == ModeRead && !a.ReadCaptured {
+				a.readLastPulseAt = time.Now()
+			}
 			if got > 0 && a.ShowSensors && len(a.CapturedRaw) >= decodeWindowMin {
 				a.tryDecodeSensorWindow()
-			} else if got > 0 && a.Mode == ModeDecode && len(a.CapturedRaw) >= decodeWindowMin {
+			} else if got > 0 && (a.Mode == ModeDecode || (a.Mode == ModeRead && !a.ReadCaptured)) && len(a.CapturedRaw) >= decodeWindowMin {
 				a.tryDecodeLiveWindow()
+				if a.Mode == ModeRead && a.LastDecoded != nil {
+					a.ReadCaptured = true
+					a.ReadAutoLocked = false
+					a.Recording = false
+				}
 			}
 			return
 		}

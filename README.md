@@ -21,21 +21,29 @@ A fast, user-friendly **CC1101 Sub-GHz Thermal Waterfall, RSSI Oscilloscope, OOK
 - **Built-in 5-Page Help (`H`)**: Interactive manual right on the device.
 - **Zero Dependencies**: Pure Go (`CGO_ENABLED=0`), renders directly to `/dev/fb0` (320×170 RGB565) and reads `/dev/input/event*` without X11/Wayland or root privileges.
 
+## Linear Home Menu & Simple / Expert Modes
+
+`rf-heatmap` boots into a clean **Home Menu (`HOME`)** with **Simple Mode** by default (`expert_mode: false`, 5 focused actions with zero scrolling):
+1. **`Read & Replay`** — 2-step linear capture & instant test replay (`433.92 / 868.35 / 315 / 915 MHz`, Rolling-code 2-step guard, `5 SAVE` saves `.sub` and opens `My Captures`).
+2. **`My Captures`** — clean list of your `.sub` files (`4 SEND`, `5 TRIM`, `6 NEW`, `7 DEL`, `8 MENU`).
+3. **`Spectrum Map`** — live Sub-GHz waterfall (`6 LOCK` jumps to `Read & Replay` on the peak frequency; `7 FOX` opens Foxhunt Geiger).
+4. **`Sensors`** — live TPMS (433/315 MHz) & Weather Station decoder.
+5. **`Settings`** — Expert Mode toggle, TX Power (`-30..+10 dBm`), opt-in MCP Server (`SSH`), DB Sync, Auto Squelch.
+
+Press **`5 EXP-`** on `HOME` (or toggle **`Expert Mode`** in `Settings`) to unlock `+4` engineering screens (**`Pulse Scope`**, **`OOK Decoder`**, **`Auto-Probe`**, **`Foxhunt Geiger`**), `Tab` mode cycling, `[x]` batch multi-select, and full `Settings`.
+
 ## Controls
 
 | Key | Action |
 | --- | --- |
-| `4`–`8` | Bottom navigation bar actions |
-| `Tab` / `8` | Switch mode (`HEATMAP → PULSE → DECODE → SAVED → PROBE → SET`) |
-| `F` / `X` (`↑` / `↓`) | Up / Down (band, Smart Squelch `k` / manual squelch in `PULSE`, list selection) |
-| `Z` / `C` (`←` / `→`) | Left / Right (cursor channel, `±50 kHz` frequency step) |
-| `B` / `D` (in `HEATMAP`) | Capture persistent room baseline (`"room_live"`) / toggle **EMI DIFF** overlay (`DIFF` pill) |
-| `B` / `M` | Cycle ISM band (other tabs; `5`/`F` in `HEATMAP`) / modulation preset (`AM650`/`AM270`/`FM238`/`FM476`/`GFSK99`) |
-| `S` / `L` | Toggle **Auto Squelch (`ASQ`)** / **Auto-Lock (`LOCK`)** |
-| `R` / `G` / `T` | `R` in `DECODE`: **SENSORS** (TPMS/Weather) · `G` in `HEATMAP`/`PULSE`: **FOXHUNT** Geiger · `T` in `PULSE`/`SAVED`: **RAW Trimmer** |
-| `Enter` | Lock peak frequency / transmit |
-| `H` | Open 4-page interactive Help |
-| `Q` / `Esc` | Quit safely (restores `GPIO 14` & puts CC1101 in `IDLE`) |
+| `F` / `X` (`↑` / `↓`) | Up / Down navigation (menus, bands, squelch, lists) |
+| `Z` / `C` (`←` / `→`) | Left / Right (frequency, cursor channel, help pages) |
+| `Enter` | Open item / Replay / Send / Lock peak |
+| `4`–`8` | Context-sensitive bottom softkeys |
+| `Esc` | Step back (`Screen → HOME`); on `HOME` prompts exit confirmation (`Enter`/`Esc` = YES) |
+| `Tab` | Return to `HOME` (Simple Mode) or cycle screens (Expert Mode) |
+| `B` / `D` (in `Spectrum Map`) | Capture room baseline (`"room_live"`) / toggle **EMI DIFF** overlay |
+| `H` / `Q` | Open 4-page interactive Help / Immediate clean exit |
 
 ## Documentation
 
@@ -49,7 +57,7 @@ go test -race ./...
 ./scripts/build_deb.sh
 ```
 
-This produces `dist/rf-heatmap_0.2.0-1_arm64.deb` ready for installation (`sudo dpkg -i`) or publishing via `czdev publish --deb dist/rf-heatmap_0.2.0-1_arm64.deb`.
+This produces `dist/rf-heatmap_0.3.9-1_arm64.deb` ready for installation (`sudo dpkg -i`) or publishing via `czdev publish --deb dist/rf-heatmap_0.3.9-1_arm64.deb`.
 
 ## Built-In MCP Server (SSH Opt-In)
 

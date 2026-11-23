@@ -37,20 +37,36 @@ func (a *App) handleSavedKey(act KeyAction) {
 			a.submitTX(ref, entry.File, -1, false)
 		}
 	case KeyNav5:
+		if !a.Settings.ExpertMode {
+			a.EnterTrimmerFromSaved()
+			return
+		}
 		if len(a.SavedFiles) > 0 {
 			entry := a.SavedFiles[a.SavedIdx]
 			a.ActiveFreq = entry.File.FreqHz
 			if a.LiveBaseline != nil {
 				a.LiveBaseline.Reset()
 			}
-			a.Mode = ModePulse
+			a.SwitchMode(ModePulse)
 			a.SetToast("Loaded " + entry.Name)
 		}
 	case KeySpace, KeyMark:
-		a.toggleSavedMark()
-	case KeyNav6, KeyDelete:
+		if a.Settings.ExpertMode {
+			a.toggleSavedMark()
+		}
+	case KeyNav6:
+		if !a.Settings.ExpertMode {
+			a.enterReadWizard()
+			return
+		}
+		a.handleSavedDelete()
+	case KeyDelete:
 		a.handleSavedDelete()
 	case KeyNav7:
+		if !a.Settings.ExpertMode {
+			a.handleSavedDelete()
+			return
+		}
 		a.handlePurgeNoiseKey()
 	case KeyTrim:
 		a.EnterTrimmerFromSaved()
@@ -264,8 +280,8 @@ func (a *App) drawSaved(c *Canvas) {
 	c.DrawRect(6, 32, 308, 108, ColBorder)
 
 	if len(a.SavedFiles) == 0 {
-		c.DrawTextCentered(ScreenW/2, 76, "No .sub files found", ColMuted, 1)
-		c.DrawTextCentered(ScreenW/2, 90, "Capture in PULSE or DECODE first", ColMuted, 1)
+		c.DrawTextCentered(ScreenW/2, 76, "No .sub captures yet", ColMuted, 1)
+		c.DrawTextCentered(ScreenW/2, 90, "Press 6 NEW to capture a remote", ColMuted, 1)
 		return
 	}
 
@@ -283,11 +299,20 @@ func (a *App) drawSaved(c *Canvas) {
 		if proto == "" {
 			proto = "RAW"
 		}
-		mark := " "
-		if a.SavedSelected[entry.Name] {
-			mark = "x"
+		var label string
+		if !a.Settings.ExpertMode {
+			cur := " "
+			if idx == a.SavedIdx {
+				cur = ">"
+			}
+			label = fmt.Sprintf("%s %-18s %.2fM %s", cur, truncate(entry.Name, 18), float64(entry.File.FreqHz)/1e6, proto)
+		} else {
+			mark := " "
+			if a.SavedSelected[entry.Name] {
+				mark = "x"
+			}
+			label = fmt.Sprintf("[%s] %-16s %.2fM %s", mark, truncate(entry.Name, 16), float64(entry.File.FreqHz)/1e6, proto)
 		}
-		label := fmt.Sprintf("[%s] %-16s %.2fM %s", mark, truncate(entry.Name, 16), float64(entry.File.FreqHz)/1e6, proto)
 		c.DrawText(10, y+3, label, ColText, 1)
 	}
 }

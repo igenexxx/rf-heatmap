@@ -57,7 +57,7 @@ func (a *App) applySensorProfile() {
 
 func (a *App) handleSensorsKey(act KeyAction) {
 	switch act {
-	case KeyQuit, KeyNav8:
+	case KeyQuit, KeyBack, KeyNav8:
 		a.ExitSensors()
 	case KeyNav4, KeySpace:
 		a.Paused = !a.Paused

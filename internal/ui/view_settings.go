@@ -8,46 +8,56 @@ import (
 	"rf-heatmap/internal/dbsync"
 )
 
-const (
-	settingsRowCount    = 8
-	settingsVisibleRows = 5
-)
+const settingsVisibleRows = 5
 
 type settingsRow struct {
+	id    string
 	label string
 	val   string
 	col   uint16
 }
 
 func (a *App) handleSettingsKey(act KeyAction) {
+	rows := a.buildSettingsRows()
+	if a.SettingsIdx >= len(rows) {
+		a.SettingsIdx = max(0, len(rows)-1)
+	}
 	switch act {
 	case KeyUp:
 		a.SettingsIdx = max(0, a.SettingsIdx-1)
 	case KeyDown:
-		a.SettingsIdx = min(settingsRowCount-1, a.SettingsIdx+1)
+		a.SettingsIdx = min(len(rows)-1, a.SettingsIdx+1)
 	case KeyLeft:
-		a.adjustSelectedSetting(-1)
+		a.adjustSelectedSetting(rows[a.SettingsIdx].id, -1)
 	case KeyRight:
-		a.adjustSelectedSetting(1)
+		a.adjustSelectedSetting(rows[a.SettingsIdx].id, 1)
 	case KeyEnter, KeySpace, KeyNav4:
-		a.toggleSelectedSetting()
+		a.toggleSelectedSetting(rows[a.SettingsIdx].id)
 	case KeyNav5:
 		a.saveSettingsExplicit()
 	case KeyNav6:
+		if !a.Settings.ExpertMode {
+			a.triggerDBSync()
+			return
+		}
 		a.ApplySettings(config.DefaultSettings())
 		a.persistSettings()
 		a.SetToast("Defaults restored")
 	case KeyNav7:
-		a.ShowHelp = true
-		a.HelpPage = 0
+		if a.Settings.ExpertMode {
+			a.ShowHelp = true
+			a.HelpPage = 0
+		}
+	case KeyNav8, KeyBack:
+		a.goHome()
 	}
 }
 
-func (a *App) adjustSelectedSetting(dir int) {
-	switch a.SettingsIdx {
-	case 3:
+func (a *App) adjustSelectedSetting(id string, dir int) {
+	switch id {
+	case "squelch_k":
 		a.adjustSquelchKSetting(0.5 * float64(dir))
-	case 7:
+	case "tx_power":
 		a.stepTXPowerSetting(dir)
 	}
 }
@@ -69,29 +79,33 @@ func (a *App) stepTXPowerSetting(dir int) {
 }
 
 func (a *App) adjustSquelchKSetting(delta float64) {
-	if a.SettingsIdx != 3 {
-		return
-	}
 	a.Settings.SquelchK = min(config.MaxSquelchK, max(config.MinSquelchK, a.Settings.SquelchK+delta))
 	a.ApplySettings(a.Settings)
 	a.persistSettings()
 	a.SetToast(fmt.Sprintf("Squelch K: %.1f", a.Settings.SquelchK))
 }
 
-func (a *App) toggleSelectedSetting() {
-	switch a.SettingsIdx {
-	case 0:
+func (a *App) toggleSelectedSetting(id string) {
+	switch id {
+	case "expert":
+		a.toggleExpertMode()
+		rows := a.buildSettingsRows()
+		if a.SettingsIdx >= len(rows) {
+			a.SettingsIdx = 0
+		}
+		return
+	case "mcp":
 		a.Settings.MCPEnabled = !a.Settings.MCPEnabled
 		a.SetToast(toggleToast("MCP Server", a.Settings.MCPEnabled, "ENABLED", "DISABLED"))
-	case 1:
+	case "asq":
 		a.Settings.AutoSquelch = !a.Settings.AutoSquelch
 		a.ApplySettings(a.Settings)
 		a.SetToast(toggleToast("Auto Squelch", a.Settings.AutoSquelch, "ON", "OFF"))
-	case 2:
+	case "autolock":
 		a.Settings.AutoLock = !a.Settings.AutoLock
 		a.ApplySettings(a.Settings)
 		a.SetToast(toggleToast("Auto-Lock", a.Settings.AutoLock, "ON", "OFF"))
-	case 3:
+	case "squelch_k":
 		nextK := a.Settings.SquelchK + 0.5
 		if nextK > config.MaxSquelchK+0.01 {
 			nextK = config.MinSquelchK
@@ -99,17 +113,17 @@ func (a *App) toggleSelectedSetting() {
 		a.Settings.SquelchK = nextK
 		a.ApplySettings(a.Settings)
 		a.SetToast(fmt.Sprintf("Squelch K: %.1f", a.Settings.SquelchK))
-	case 4:
+	case "reset_ml":
 		a.ResetMLBaselines()
 		a.SetToast("ML Baseline reset")
 		return
-	case 5:
+	case "sync":
 		a.triggerDBSync()
 		return
-	case 6:
+	case "sources":
 		a.openSourcesManage()
 		return
-	case 7:
+	case "tx_power":
 		a.stepTXPowerSetting(1)
 		return
 	}
@@ -232,31 +246,37 @@ func (a *App) persistSettings() {
 }
 
 func (a *App) drawSettings(c *Canvas) {
-	c.DrawText(6, 21, "Settings (Opt-In Services)", ColCyan, 1)
-	c.FillRect(6, 31, 308, 90, ColPanel)
-	c.DrawRect(6, 31, 308, 90, ColBorder)
-
 	rows := a.buildSettingsRows()
+	if a.SettingsIdx >= len(rows) {
+		a.SettingsIdx = max(0, len(rows)-1)
+	}
+	c.FillRect(6, 22, 308, 98, ColPanel)
+	c.DrawRect(6, 22, 308, 98, ColBorder)
+
 	start := max(0, a.SettingsIdx-(settingsVisibleRows-1))
 	visible := min(settingsVisibleRows, len(rows)-start)
 	for r := range visible {
 		i := start + r
 		row := rows[i]
-		y := 34 + r*17
+		y := 26 + r*19
 		if i == a.SettingsIdx {
-			c.FillRect(8, y-1, 304, 15, ColNavActive)
-			c.DrawRect(8, y-1, 304, 15, ColCyan)
+			c.FillRect(8, y-1, 304, 17, ColNavActive)
+			c.DrawRect(8, y-1, 304, 17, ColCyan)
 		}
-		c.DrawText(14, y+3, row.label, ColText, 1)
-		c.DrawText(306-len(row.val)*6, y+3, row.val, row.col, 1)
+		c.DrawText(14, y+4, row.label, ColText, 1)
+		c.DrawText(306-len(row.val)*6, y+4, row.val, row.col, 1)
 	}
 	a.drawSettingsFooter(c)
 }
 
-func (a *App) buildSettingsRows() [settingsRowCount]settingsRow {
-	mcpVal, mcpCol := "DISABLED", ColAmber
+func (a *App) buildSettingsRows() []settingsRow {
+	expVal, expCol := "OFF (Simple)", ColCyan
+	if a.Settings.ExpertMode {
+		expVal, expCol = "ON (Full Lab)", ColMagenta
+	}
+	mcpVal, mcpCol := "OFF (safe)", ColAmber
 	if a.Settings.MCPEnabled {
-		mcpVal, mcpCol = "ENABLED", ColGreen
+		mcpVal, mcpCol = "ON (--mcp)", ColGreen
 	}
 	asqVal, asqCol := "OFF", ColMuted
 	if a.Settings.AutoSquelch {
@@ -266,7 +286,7 @@ func (a *App) buildSettingsRows() [settingsRowCount]settingsRow {
 	if a.Settings.AutoLock {
 		lckVal, lckCol = "ON", ColGreen
 	}
-	syncVal, syncCol := "SYNC", ColCyan
+	syncVal, syncCol := "Run Now", ColCyan
 	if a.SyncBusy {
 		syncVal, syncCol = "SYNCING", ColMagenta
 	}
@@ -274,15 +294,25 @@ func (a *App) buildSettingsRows() [settingsRowCount]settingsRow {
 	if a.Settings.TXPowerDBm >= 10 {
 		txCol = ColAmber
 	}
-	return [settingsRowCount]settingsRow{
-		{"MCP Server (SSH)", mcpVal, mcpCol},
-		{"Auto Squelch", asqVal, asqCol},
-		{"Auto-Lock", lckVal, lckCol},
-		{"Squelch K", fmt.Sprintf("%.1f sigma", a.Settings.SquelchK), ColCyan},
-		{"Reset ML Baseline", "ACTION", ColAmber},
-		{"Sync DB Sources", syncVal, syncCol},
-		{"Manage DB Sources", "OPEN>", ColCyan},
-		{"TX Power (PATABLE)", fmt.Sprintf("%+d dBm", a.Settings.TXPowerDBm), txCol},
+	if !a.Settings.ExpertMode {
+		return []settingsRow{
+			{"expert", "Expert Mode", expVal, expCol},
+			{"tx_power", "TX Power", fmt.Sprintf("%+d dBm", a.Settings.TXPowerDBm), txCol},
+			{"mcp", "MCP Server (SSH)", mcpVal, mcpCol},
+			{"sync", "Sync DB Sources", syncVal, syncCol},
+			{"asq", "Auto Squelch", asqVal, asqCol},
+		}
+	}
+	return []settingsRow{
+		{"expert", "Expert Mode", expVal, expCol},
+		{"mcp", "MCP Server (SSH)", mcpVal, mcpCol},
+		{"asq", "Auto Squelch", asqVal, asqCol},
+		{"autolock", "Auto-Lock", lckVal, lckCol},
+		{"squelch_k", "Squelch K", fmt.Sprintf("%.1f sigma", a.Settings.SquelchK), ColCyan},
+		{"reset_ml", "Reset ML Baseline", "ACTION", ColAmber},
+		{"sync", "Sync DB Sources", syncVal, syncCol},
+		{"sources", "Manage DB Sources", "OPEN>", ColCyan},
+		{"tx_power", "TX Power (PATABLE)", fmt.Sprintf("%+d dBm", a.Settings.TXPowerDBm), txCol},
 	}
 }
 

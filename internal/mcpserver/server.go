@@ -209,7 +209,7 @@ func (s *Server) handleInitialize(id json.RawMessage) *rpcResponse {
 	return rpcOKResp(id, map[string]any{
 		"protocolVersion": ProtocolVersion,
 		"capabilities":    map[string]any{"tools": map[string]any{}},
-		"serverInfo":      map[string]any{"name": "rf-heatmap", "version": "0.2.0"},
+		"serverInfo":      map[string]any{"name": "rf-heatmap", "version": "0.3.9"},
 	})
 }
 

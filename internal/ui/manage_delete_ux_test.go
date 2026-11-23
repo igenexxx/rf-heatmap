@@ -43,6 +43,7 @@ func TestBatchDeleteInSavedProbeAndSourcesManage(t *testing.T) {
 
 	app := NewApp(nil, userDir)
 	defer app.Close()
+	app.Settings.ExpertMode = true
 	app.SetSourcesPath(sourcesPath)
 	app.SetLibraryStore(library.NewStore(userDir, dbDir, nil))
 
@@ -71,9 +72,9 @@ func TestBatchDeleteInSavedProbeAndSourcesManage(t *testing.T) {
 		t.Fatalf("expected f1.sub recorded in .sync-state.json ignored, got %+v", st.Ignored)
 	}
 
-	// 3. SET -> Manage DB Sources: open row 6, toggle enabled, batch delete source+dir.
+	// 3. SET -> Manage DB Sources: open row 7 (Expert Mode), toggle enabled, batch delete source+dir.
 	app.Mode = ModeSettings
-	app.SettingsIdx = 6
+	app.SettingsIdx = 7
 	app.HandleKey(KeyEnter)
 	if !app.ShowSources || len(app.SourceRows) != 2 {
 		t.Fatalf("expected ShowSources with 2 rows, got show=%v len=%d", app.ShowSources, len(app.SourceRows))

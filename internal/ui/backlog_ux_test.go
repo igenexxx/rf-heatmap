@@ -13,6 +13,7 @@ import (
 
 func TestSettingsResetMLBaseline(t *testing.T) {
 	app := NewApp(nil, t.TempDir())
+	app.Settings.ExpertMode = true
 	app.Mode = ModeSettings
 
 	// Warm up baselines and trackers so we can verify ResetMLBaselines clears them.
@@ -26,12 +27,12 @@ func TestSettingsResetMLBaseline(t *testing.T) {
 	app.HasPrediction = true
 	app.HasMatch = true
 
-	// Navigate down to row 4 (Reset ML Baseline) and trigger it.
-	for range 4 {
+	// Navigate down to row 5 (Reset ML Baseline in Expert Mode) and trigger it.
+	for range 5 {
 		app.HandleKey(KeyDown)
 	}
-	if app.SettingsIdx != 4 {
-		t.Fatalf("SettingsIdx = %d, want 4", app.SettingsIdx)
+	if app.SettingsIdx != 5 {
+		t.Fatalf("SettingsIdx = %d, want 5", app.SettingsIdx)
 	}
 	app.HandleKey(KeyEnter)
 
@@ -87,6 +88,7 @@ func TestSavedPurgeNoiseTwoStepConfirmation(t *testing.T) {
 	}
 
 	app := NewApp(nil, dir)
+	app.Settings.ExpertMode = true
 	app.Mode = ModeSaved
 	app.refreshSavedFiles()
 

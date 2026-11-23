@@ -81,21 +81,70 @@ func main() {
 		panic(err)
 	}
 
+	// 1. HOME (Simple Mode)
+	app.Settings.ExpertMode = false
+	app.SwitchMode(ui.ModeHome)
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "home.png"), *scale)
+
+	// 2. READ & REPLAY (Step 2 captured Princeton key)
+	app.SwitchMode(ui.ModeRead)
+	app.ActiveFreq = 433_920_000
+	app.LastDecoded = &subfile.DecodedKey{
+		Protocol: "Princeton", Bits: 24, KeyHex: "00 00 00 00 00 A5 5A 01", TE: 350,
+	}
+	app.ReadCaptured = true
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "read.png"), *scale)
+	app.ReadCaptured = false
+	app.LastDecoded = nil
+
+	// 3. SPECTRUM MAP (HEATMAP)
+	app.SwitchMode(ui.ModeHeatmap)
 	for range 56 {
 		app.Step()
 	}
+	app.ToastText = ""
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "heatmap.png"), *scale)
 
-	app.HandleKey(ui.KeyTab)
+	// 4. MY CAPTURES (Simple Mode)
+	app.SwitchMode(ui.ModeSaved)
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "saved.png"), *scale)
+
+	// 5. SENSORS (TPMS / Weather)
+	app.EnterSensors()
+	for range 25 {
+		app.Step()
+	}
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "sensors.png"), *scale)
+	app.ExitSensors()
+
+	// 6. SETTINGS (Simple Mode)
+	app.SwitchMode(ui.ModeSettings)
+	app.SettingsIdx = 0
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "settings.png"), *scale)
+
+	// Expert Mode screens for Learning Portal & docs
+	app.Settings.ExpertMode = true
+	app.SwitchMode(ui.ModePulse)
 	app.HandleKey(ui.KeyNav4)
 	for range 48 {
 		app.Step()
 	}
+	app.ToastText = ""
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "pulse.png"), *scale)
 
-	app.HandleKey(ui.KeyTab)
+	app.SwitchMode(ui.ModeDecode)
 	app.ToastText = ""
 	for range 12 {
 		app.Step()
@@ -103,13 +152,8 @@ func main() {
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "decode.png"), *scale)
 
-	app.HandleKey(ui.KeyTab)
-	app.ToastText = ""
-	app.Render(c)
-	savePNG(c, filepath.Join(*outDir, "saved.png"), *scale)
-
 	// ModeProbe: simulate paused auto-probe after 3 sent signals, rewound to #2.
-	app.HandleKey(ui.KeyTab)
+	app.SwitchMode(ui.ModeProbe)
 	app.Probe.OnTXStarted(0)
 	app.Probe.OnTXStarted(1)
 	app.Probe.OnTXStarted(2)
@@ -120,15 +164,10 @@ func main() {
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "probe.png"), *scale)
 
-	app.HandleKey(ui.KeyTab)
-	app.ToastText = ""
-	app.Render(c)
-	savePNG(c, filepath.Join(*outDir, "settings.png"), *scale)
-
-	app.HandleKey(ui.KeyTab)
+	app.Settings.ExpertMode = false
+	app.SwitchMode(ui.ModeHome)
 	app.ToastText = ""
 	app.HandleKey(ui.KeyHelp)
-	app.HandleKey(ui.KeyRight)
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "help.png"), *scale)
 

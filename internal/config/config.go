@@ -55,6 +55,7 @@ func ClampTXPowerDBm(dbm int) int {
 // Opt-in services such as the MCP server are disabled by default.
 type Settings struct {
 	MCPEnabled      bool    `json:"mcp_enabled"`
+	ExpertMode      bool    `json:"expert_mode"`
 	AutoSquelch     bool    `json:"auto_squelch"`
 	AutoLock        bool    `json:"auto_lock"`
 	SquelchK        float64 `json:"squelch_k"`
@@ -66,6 +67,7 @@ type Settings struct {
 func DefaultSettings() Settings {
 	return Settings{
 		MCPEnabled:      false,
+		ExpertMode:      false,
 		AutoSquelch:     true,
 		AutoLock:        true,
 		SquelchK:        DefaultSquelchK,

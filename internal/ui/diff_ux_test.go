@@ -9,6 +9,7 @@ import (
 
 func TestHeatmapRoomBaselineAndEMIDiff(t *testing.T) {
 	app := NewApp(nil, t.TempDir())
+	app.Mode = ModeHeatmap
 	app.BaselinesDir = t.TempDir()
 
 	// Pressing D before any baseline exists must not enable DiffMode.

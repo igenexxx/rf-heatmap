@@ -3,8 +3,6 @@ package ui
 import (
 	"fmt"
 	"math"
-
-	"rf-heatmap/internal/cc1101"
 )
 
 func pauseLabel(paused bool) string {
@@ -42,44 +40,71 @@ func truncate(s string, maxLen int) string {
 func (a *App) drawHeader(c *Canvas) {
 	c.FillRect(0, 0, ScreenW, 17, ColPanel)
 	c.HLine(0, 17, ScreenW, ColBorder)
+	a.drawHeaderTitle(c)
+	a.drawHeaderBadges(c)
+}
 
-	c.FillRect(4, 3, 48, 11, ColCyan)
-	c.DrawText(7, 5, "RF-HEAT", ColBg, 1)
-	modeLabel := a.Mode.String()
+func (a *App) drawHeaderTitle(c *Canvas) {
+	if a.Mode == ModeHome && !a.ShowFoxhunt && !a.ShowTrimmer && !a.ShowSensors && !a.ShowSources {
+		c.FillRect(4, 3, 56, 11, ColCyan)
+		c.DrawText(7, 5, "RF-HEAT", ColBg, 1)
+		modeLbl, modeCol := "SIMPLE", ColMuted
+		if a.Settings.ExpertMode {
+			modeLbl, modeCol = "EXPERT", ColMagenta
+		}
+		c.DrawText(66, 5, modeLbl, modeCol, 1)
+		return
+	}
+	title := a.Mode.Title()
 	switch {
 	case a.ShowFoxhunt:
-		modeLabel = "FOXHUNT"
+		title = "FOXHUNT"
 	case a.ShowTrimmer:
-		modeLabel = "TRIM"
+		title = "RAW TRIMMER"
 	case a.ShowSensors:
-		modeLabel = "SENSOR"
+		title = "SENSORS"
+	case a.ShowSources:
+		title = "DB SOURCES"
 	}
-	drawStatusPill(c, 56, 48, modeLabel, ColCyan)
-
-	freqStr := fmt.Sprintf("%.2fM %s", float64(a.ActiveFreq)/1e6, cc1101.GetPresetSpec(a.Preset).Name)
-	c.DrawText(110, 5, freqStr, ColText, 1)
-
-	asqCol := ColMuted
-	if a.AutoSquelch {
-		asqCol = ColGreen
+	c.DrawText(6, 5, "< "+truncate(title, 18), ColCyan, 1)
+	if a.showHeaderFreq() {
+		freqStr := fmt.Sprintf("%.2fM", float64(a.ActiveFreq)/1e6)
+		c.DrawText(134, 5, freqStr, ColText, 1)
 	}
-	drawStatusPill(c, 196, 30, "ASQ", asqCol)
+}
 
+func (a *App) showHeaderFreq() bool {
+	if a.ShowFoxhunt || a.ShowSensors {
+		return true
+	}
+	if a.ShowTrimmer || a.ShowSources {
+		return false
+	}
+	return a.Mode == ModeRead || a.Mode == ModeHeatmap || a.Mode == ModePulse || a.Mode == ModeDecode
+}
+
+func (a *App) drawHeaderBadges(c *Canvas) {
+	if a.Settings.ExpertMode && a.Mode != ModeHome {
+		drawStatusPill(c, 198, 28, "EXP", ColMagenta)
+	}
 	if a.Mode == ModeHeatmap && a.DiffMode && !a.ShowFoxhunt && !a.ShowTrimmer && !a.ShowSensors {
-		drawStatusPill(c, 230, 34, "DIFF", ColRed)
-	} else {
-		lckCol := ColMuted
-		if a.AutoLock {
-			lckCol = ColCyan
+		drawStatusPill(c, 230, 36, "DIFF", ColRed)
+	} else if a.Mode == ModePulse || a.Mode == ModeHeatmap {
+		if a.AutoSquelch {
+			drawStatusPill(c, 230, 36, "ASQ", ColGreen)
 		}
-		drawStatusPill(c, 230, 34, "LOCK", lckCol)
 	}
-
 	if a.SimMode {
 		drawStatusPill(c, 272, 44, "SIM", ColAmber)
 		return
 	}
 	drawStatusPill(c, 272, 44, "CC1101", ColGreen)
+}
+
+func drawConfirmBanner(c *Canvas, msg string) {
+	c.FillRect(14, 121, 292, 18, ColPanel)
+	c.DrawRect(14, 121, 292, 18, ColAmber)
+	c.DrawTextCentered(ScreenW/2, 126, truncate(msg, 46), ColAmber, 1)
 }
 
 func drawStatusPill(c *Canvas, x, w int, label string, col uint16) {
@@ -114,69 +139,49 @@ type helpPageContent struct {
 
 var helpPages = []helpPageContent{
 	{
-		Title: "1/5 CONTROLS & STATUS",
+		Title: "1/4 HOME MENU & NAVIGATION",
 		Lines: []string{
-			"4..8   : Bottom bar quick actions",
-			"Tab/8  : Switch mode (6 tabs +SET)",
-			"F / X  : Up / Down (Band/Squelch/List)",
-			"Z / C  : Left / Right (Cursor/Intvl)",
-			"B / M  : Cycle ISM Band / Modulation",
-			"S / L  : Toggle Auto Squelch / Lock",
-			"Enter  : Lock Peak / Toggle / TX",
-			"H / Q  : Toggle Help / Quit safely",
+			"F / X : Move up / down in menus",
+			"Z / C : Left / Right (Freq / Pages)",
+			"Enter : Open item or primary action",
+			"Esc   : Step back (Home -> Exit ask)",
+			"4..8  : Bottom bar labeled softkeys",
+			"5 EXP : Toggle Simple / Expert Mode",
+			"H : Help modal   Q : Quit immediately",
 		},
 	},
 	{
-		Title: "2/5 HEATMAP & WATERFALL",
+		Title: "2/4 READ & REPLAY (AUTO-CAPTURE)",
 		Lines: []string{
-			"Top chart: Live RSSI bars per ch.",
-			"Amber ticks: Peak-Hold max signal.",
-			"Cyan box: Cursor channel (Z/C move).",
-			"Bottom: Thermal Waterfall over time:",
-			" SpectrumNet-2D pill: OOK/FHSS/LORA/",
-			" EMI/CW JAM!/ROLLJAM! (top-right).",
-			"B: Save room baseline, D: EMI DIFF",
-			"Press Enter/6 to LOCK & jump to PULSE",
+			"Step 1: Auto-scans 433/868/315/915MHz!",
+			"  Press any remote -> auto-locks & grabs",
+			"  4 AUTO/FREQ: switch Auto or fixed MHz",
+			"Step 2: Captured! Shows protocol/code.",
+			"  Enter / 4 SEND : Replay signal",
+			"  5 SAVE : Save .sub & open Captures",
+			"  6 AGAIN: Listen for next signal",
 		},
 	},
 	{
-		Title: "3/5 PULSE, SQUELCH & MOD",
+		Title: "3/4 SPECTRUM, CAPTURES & SENSORS",
 		Lines: []string{
-			"SQ (Amber line): Noise gate in dBm.",
-			" Green bars = signal above squelch.",
-			"AM650/AM270: OOK (keyfobs, gates).",
-			" 650kHz=wide catch, 270kHz=low noise.",
-			"FM238/FM476: 2-FSK (2.38/47.6kHz dev).",
-			"4(REC) captures RAW GDO0 pulses.",
-			"5(TX) replays, 6(SAVE) writes .sub.",
-			"DF:±kHz shows CC1101 FREQEST drift.",
-			"SET -> TX Power steps -30..+10 dBm.",
+			"Spectrum Map: Live waterfall + Peak",
+			"  5 BAND  6 LOCK (jump to peak freq)",
+			"  7 FOX (Geiger)  B:Base  D:EMI Diff",
+			"My Captures: 4 SEND 5 TRIM 6 NEW 7 DEL",
+			"Sensors: Live TPMS (433/315) & Weather",
+			"  5 UNIT (kPa/PSI)  6 PROF (Profile)",
 		},
 	},
 	{
-		Title: "4/5 AUTO-PROBE & GENERATORS",
+		Title: "4/4 EXPERT MODE & MCP SERVER",
 		Lines: []string{
-			"PROBE steps through DB packs, USER, or",
-			" built-in GEN:CAME-12 / GEN:Linear-10.",
-			"Z/C: interval 0.05s..5.0s (B/M=freq).",
-			"4(AUTO/STOP) Space/Enter: instant halt",
-			"F/X: step up past reaction delay",
-			" > = last sent, * = last 12 sent",
-			"5(TRY)/Enter: single test highlighted",
-			"6(SAVE): copy winner to USER library",
-		},
-	},
-	{
-		Title: "5/5 DECODE, ML, FOX & TRIM",
-		Lines: []string{
-			"DECODE: PulseNet-RF (28 protocols),",
-			" 32D FP, ML-CLEAN/PN-CLEAN & ROLLING",
-			" guard. R=SENSORS (TPMS/Weather).",
-			"G (HEATMAP/PULSE): Fullscreen FOXHUNT",
-			" Geiger RSSI + peak-hold (Esc=back).",
-			"T (PULSE/SAVED): RAW Trimmer (1..10x)",
-			" atomic save to USER captures only.",
-			"SET: Opt-in MCP (39 tools) & .czml",
+			"Enable Expert Mode (HOME -> 5 EXP / SET)",
+			"Unlocks: Pulse Scope (FREQEST, RAW),",
+			"  OOK Decoder, Auto-Probe (GEN:CAME-12",
+			"  & DB packs), Foxhunt, full Settings.",
+			"PulseNet-RF (28 proto) + SpectrumNet-2D",
+			"MCP (opt-in SET): rf-heatmap --mcp",
 		},
 	},
 }

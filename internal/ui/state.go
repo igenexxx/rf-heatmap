@@ -18,7 +18,6 @@ const (
 	waterfallRows        = 56
 	maxCols              = 36
 	rssiHistoryLen       = 64
-	modeCount            = 6
 	defaultFreqHz        = 433_920_000
 	defaultCursorCol     = 18
 	defaultSquelchDBm    = -78
@@ -34,24 +33,31 @@ const (
 type Mode int
 
 const (
-	ModeHeatmap Mode = iota
+	ModeHome Mode = iota
+	ModeRead
+	ModeSaved
+	ModeHeatmap
 	ModePulse
 	ModeDecode
-	ModeSaved
 	ModeProbe
 	ModeSettings
+	modeCount
 )
 
 func (m Mode) String() string {
 	switch m {
+	case ModeHome:
+		return "HOME"
+	case ModeRead:
+		return "READ"
+	case ModeSaved:
+		return "SAVED"
 	case ModeHeatmap:
 		return "HEATMAP"
 	case ModePulse:
 		return "PULSE"
 	case ModeDecode:
 		return "DECODE"
-	case ModeSaved:
-		return "SAVED"
 	case ModeProbe:
 		return "PROBE"
 	case ModeSettings:
@@ -59,6 +65,49 @@ func (m Mode) String() string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+// Title returns the human-readable breadcrumb header label for m.
+func (m Mode) Title() string {
+	switch m {
+	case ModeHome:
+		return "RF HEATMAP"
+	case ModeRead:
+		return "READ & REPLAY"
+	case ModeSaved:
+		return "MY CAPTURES"
+	case ModeHeatmap:
+		return "SPECTRUM MAP"
+	case ModePulse:
+		return "PULSE SCOPE"
+	case ModeDecode:
+		return "OOK DECODER"
+	case ModeProbe:
+		return "AUTO-PROBE"
+	case ModeSettings:
+		return "SETTINGS"
+	default:
+		return "RF HEATMAP"
+	}
+}
+
+// HomeState holds cursor, scroll, and exit confirmation for the Home Menu.
+type HomeState struct {
+	HomeCursor  int
+	HomeScroll  int
+	ConfirmExit bool
+}
+
+// ReadWizardState holds the 2-step Read & Replay Sub-GHz auto-capture wizard state.
+type ReadWizardState struct {
+	ReadCaptured    bool
+	ReadAutoScan    bool
+	ReadAutoLocked  bool
+	ReadFreqIdx     int
+	ReadNoiseWarn   bool
+	ReadRollWarn    bool
+	readLockUntil   time.Time
+	readLastPulseAt time.Time
 }
 
 // BandPreset defines a frequency sweep range for the Heatmap.

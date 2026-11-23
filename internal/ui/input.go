@@ -13,6 +13,7 @@ type KeyAction int
 const (
 	KeyNone KeyAction = iota
 	KeyQuit
+	KeyBack
 	KeyTab
 	KeyEnter
 	KeySpace
@@ -75,7 +76,7 @@ const (
 )
 
 var linuxKeyMap = map[uint16]KeyAction{
-	codeEsc:       KeyQuit,
+	codeEsc:       KeyBack,
 	codeQ:         KeyQuit,
 	codeTab:       KeyTab,
 	codeEnter:     KeyEnter,

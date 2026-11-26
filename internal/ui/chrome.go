@@ -45,7 +45,7 @@ func (a *App) drawHeader(c *Canvas) {
 }
 
 func (a *App) drawHeaderTitle(c *Canvas) {
-	if a.Mode == ModeHome && !a.ShowFoxhunt && !a.ShowTrimmer && !a.ShowSensors && !a.ShowSources {
+	if a.Mode == ModeHome && !a.ShowFoxhunt && !a.ShowTrimmer && !a.ShowSnapshot && !a.ShowSensors && !a.ShowSources {
 		c.FillRect(4, 3, 56, 11, ColCyan)
 		c.DrawText(7, 5, "RF-HEAT", ColBg, 1)
 		modeLbl, modeCol := "SIMPLE", ColMuted
@@ -57,6 +57,8 @@ func (a *App) drawHeaderTitle(c *Canvas) {
 	}
 	title := a.Mode.Title()
 	switch {
+	case a.ShowSnapshot:
+		title = "SIGNAL SNAPSHOT"
 	case a.ShowFoxhunt:
 		title = "FOXHUNT"
 	case a.ShowTrimmer:
@@ -68,13 +70,17 @@ func (a *App) drawHeaderTitle(c *Canvas) {
 	}
 	c.DrawText(6, 5, "< "+truncate(title, 18), ColCyan, 1)
 	if a.showHeaderFreq() {
-		freqStr := fmt.Sprintf("%.2fM", float64(a.ActiveFreq)/1e6)
+		freq := a.ActiveFreq
+		if a.ShowSnapshot && a.SnapFreqHz > 0 {
+			freq = a.SnapFreqHz
+		}
+		freqStr := fmt.Sprintf("%.2fM", float64(freq)/1e6)
 		c.DrawText(134, 5, freqStr, ColText, 1)
 	}
 }
 
 func (a *App) showHeaderFreq() bool {
-	if a.ShowFoxhunt || a.ShowSensors {
+	if a.ShowSnapshot || a.ShowFoxhunt || a.ShowSensors {
 		return true
 	}
 	if a.ShowTrimmer || a.ShowSources {
@@ -130,73 +136,4 @@ func (a *App) drawNavBar(c *Canvas, labels [5]string) {
 		// Action label centered at Y=153..160.
 		c.DrawTextCentered(cx+4, 154, labels[i], ColText, 1)
 	}
-}
-
-type helpPageContent struct {
-	Title string
-	Lines []string
-}
-
-var helpPages = []helpPageContent{
-	{
-		Title: "1/4 HOME MENU & NAVIGATION",
-		Lines: []string{
-			"F / X : Move up / down in menus",
-			"Z / C : Left / Right (Freq / Pages)",
-			"Enter : Open item or primary action",
-			"Esc   : Step back (Home -> Exit ask)",
-			"4..8  : Bottom bar labeled softkeys",
-			"5 EXP : Toggle Simple / Expert Mode",
-			"H : Help modal   Q : Quit immediately",
-		},
-	},
-	{
-		Title: "2/4 READ & REPLAY (AUTO-CAPTURE)",
-		Lines: []string{
-			"Step 1: Auto-scans 433/868/315/915MHz!",
-			"  Press any remote -> auto-locks & grabs",
-			"  4 AUTO/FREQ: switch Auto or fixed MHz",
-			"Step 2: Captured! Shows protocol/code.",
-			"  Enter / 4 SEND : Replay signal",
-			"  5 SAVE : Save .sub & open Captures",
-			"  6 AGAIN: Listen for next signal",
-		},
-	},
-	{
-		Title: "3/4 SPECTRUM, CAPTURES & SENSORS",
-		Lines: []string{
-			"Spectrum Map: Live waterfall + Peak",
-			"  5 BAND  6 LOCK (jump to peak freq)",
-			"  7 FOX (Geiger)  B:Base  D:EMI Diff",
-			"My Captures: 4 SEND 5 TRIM 6 NEW 7 DEL",
-			"Sensors: Live TPMS (433/315) & Weather",
-			"  5 UNIT (kPa/PSI)  6 PROF (Profile)",
-		},
-	},
-	{
-		Title: "4/4 EXPERT MODE & MCP SERVER",
-		Lines: []string{
-			"Enable Expert Mode (HOME -> 5 EXP / SET)",
-			"Unlocks: Pulse Scope (FREQEST, RAW),",
-			"  OOK Decoder, Auto-Probe (GEN:CAME-12",
-			"  & DB packs), Foxhunt, full Settings.",
-			"PulseNet-RF (28 proto) + SpectrumNet-2D",
-			"MCP (opt-in SET): rf-heatmap --mcp",
-		},
-	},
-}
-
-func (a *App) drawHelpModal(c *Canvas) {
-	page := helpPages[a.HelpPage%len(helpPages)]
-	c.FillRect(10, 18, 300, 128, ColPanel)
-	c.DrawRect(10, 18, 300, 128, ColCyan)
-	c.FillRect(11, 19, 298, 13, ColNavActive)
-	c.DrawTextCentered(ScreenW/2, 22, page.Title, ColText, 1)
-
-	for i, l := range page.Lines {
-		c.DrawText(16, 36+i*12, l, ColText, 1)
-	}
-
-	c.HLine(12, 133, 296, ColBorder)
-	c.DrawTextCentered(ScreenW/2, 136, "[Z/C] Page   [Enter/H] Close", ColAmber, 1)
 }

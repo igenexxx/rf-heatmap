@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PKG="rf-heatmap"
-VER="0.3.9"
+VER="0.4.0"
 REV="1"
 ARCH="arm64"
 DEB_NAME="${PKG}_${VER}-${REV}_${ARCH}.deb"
@@ -50,7 +50,7 @@ Section: utils
 Priority: optional
 Architecture: ${ARCH}
 Installed-Size: ${SIZE_KB}
-Maintainer: Zhenya <zhenya@cardputer.cc>
+Maintainer: Zhenya <61760187+igenexxx@users.noreply.github.com>
 Description: CC1101 Sub-GHz thermal waterfall heatmap and Flipper .sub studio
  RF Heatmap turns CardputerZero with Cap CC1101 into a pocket Sub-GHz
  spectrum analyzer with thermal waterfall, RSSI squelch scope, OOK decoder,

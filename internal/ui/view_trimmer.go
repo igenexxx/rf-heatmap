@@ -86,6 +86,8 @@ func (a *App) handleTrimmerKey(act KeyAction) {
 		a.txTrimmedPreview()
 	case KeyNav7:
 		a.saveTrimmedRaw()
+	case KeyInspect:
+		a.EnterSnapshotFromTrimmer()
 	}
 }
 

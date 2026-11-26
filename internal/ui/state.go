@@ -334,3 +334,28 @@ type TrimmerState struct {
 	Repeats       int  // 1..10
 	trimReturnMod Mode
 }
+
+// SnapshotLayout selects the active visualization mode in the Signal Snapshot sub-view.
+type SnapshotLayout int
+
+const (
+	SnapshotLayoutSplit SnapshotLayout = iota
+	SnapshotLayoutWave
+	SnapshotLayoutHist
+	snapshotLayoutCount
+)
+
+// SnapshotState holds the captured Signal Snapshot oscilloscope & pulse-width histogram state.
+type SnapshotState struct {
+	ShowSnapshot   bool
+	SnapName       string
+	SnapProtocol   string
+	SnapFreqHz     uint32
+	SnapPreset     string
+	SnapRaw        []int32
+	SnapData       rfml.SignalSnapshot
+	SnapLayout     SnapshotLayout
+	SnapZoomIdx    int // 0..3 -> 1x, 2x, 4x, 8x
+	SnapPanPct     int // 0..100 horizontal pan along capture timeline
+	snapReturnMode Mode
+}

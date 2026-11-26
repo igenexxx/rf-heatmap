@@ -98,6 +98,28 @@ func main() {
 	app.ToastText = ""
 	app.Render(c)
 	savePNG(c, filepath.Join(*outDir, "read.png"), *scale)
+
+	// 2b. SIGNAL SNAPSHOT & TIMING HISTOGRAM (Split View from captured Princeton signal with realistic jitter)
+	samplePulses, _ := subfile.EncodePulses(sample1)
+	jitterPattern := []int32{0, 12, -18, 22, -10, 8, -24, 16, -6}
+	noisyPulses := make([]int32, len(samplePulses))
+	for i, p := range samplePulses {
+		d := jitterPattern[i%len(jitterPattern)]
+		if p > 0 && p < 3000 {
+			noisyPulses[i] = p + d
+		} else if p < 0 && p > -3000 {
+			noisyPulses[i] = p - d
+		} else {
+			noisyPulses[i] = p
+		}
+	}
+	app.CapturedRaw = noisyPulses
+	app.EnterSnapshotFromRead()
+	app.ToastText = ""
+	app.Render(c)
+	savePNG(c, filepath.Join(*outDir, "snapshot.png"), *scale)
+	app.ExitSnapshot()
+	app.CapturedRaw = nil
 	app.ReadCaptured = false
 	app.LastDecoded = nil
 

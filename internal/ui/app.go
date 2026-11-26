@@ -31,6 +31,7 @@ type App struct {
 	SensorState
 	FoxhuntViewState
 	TrimmerState
+	SnapshotState
 }
 
 // NewApp initializes the application state.
@@ -207,6 +208,7 @@ func (a *App) goHome() {
 	a.Recording = false
 	a.ShowFoxhunt = false
 	a.ShowTrimmer = false
+	a.ShowSnapshot = false
 	a.ShowSensors = false
 	a.ShowSources = false
 	a.SwitchMode(ModeHome)
@@ -231,6 +233,10 @@ func (a *App) HandleKey(act KeyAction) bool {
 		a.handleFoxhuntKey(act)
 		return false
 	}
+	if a.ShowSnapshot {
+		a.handleSnapshotKey(act)
+		return false
+	}
 	if a.ShowTrimmer {
 		a.handleTrimmerKey(act)
 		return false
@@ -251,18 +257,6 @@ func (a *App) HandleKey(act KeyAction) bool {
 	}
 	a.dispatchModeKey(act)
 	return false
-}
-
-func (a *App) handleHelpKey(act KeyAction) {
-	n := len(helpPages)
-	switch act {
-	case KeyLeft, KeyUp:
-		a.HelpPage = (a.HelpPage + n - 1) % n
-	case KeyRight, KeyDown, KeySpace, KeyTab, KeyNav5:
-		a.HelpPage = (a.HelpPage + 1) % n
-	case KeyQuit, KeyBack, KeyEnter, KeyNav4, KeyNav8:
-		a.ShowHelp = false
-	}
 }
 
 func (a *App) handleGlobalKey(act KeyAction) bool {
@@ -434,6 +428,9 @@ func (a *App) Render(c *Canvas) {
 	case a.ShowFoxhunt:
 		a.drawFoxhunt(c)
 		a.drawNavBar(c, [5]string{"RSTPK", "MUTE", "BAND", "MOD", "BACK"})
+	case a.ShowSnapshot:
+		a.drawSnapshot(c)
+		a.drawNavBar(c, a.snapshotNavLabels())
 	case a.ShowTrimmer:
 		a.drawTrimmer(c)
 		a.drawNavBar(c, [5]string{"HDL", "AUTO", "TX", "SAVE", "BACK"})

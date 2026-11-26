@@ -195,7 +195,9 @@ func (a *App) handleReadCapturedKey(act KeyAction) {
 	case KeyNav6, KeySpace:
 		a.resetReadWizard(a.ReadAutoScan)
 		a.SetToast("Ready - press remote button")
-	case KeyNav7, KeyBand:
+	case KeyNav7, KeyInspect:
+		a.EnterSnapshotFromRead()
+	case KeyBand:
 		a.cycleReadFreq(1)
 		a.resetReadWizard(a.ReadAutoScan)
 	case KeyBack, KeyNav8:
@@ -304,7 +306,7 @@ func (a *App) readNavLabels() [5]string {
 		}
 		return [5]string{s4, "MOD", s6, s7, "MENU"}
 	}
-	return [5]string{"SEND", "SAVE", "AGAIN", "FREQ", "MENU"}
+	return [5]string{"SEND", "SAVE", "AGAIN", "SNAP", "MENU"}
 }
 
 func (a *App) drawReadListening(c *Canvas) {
@@ -370,7 +372,7 @@ func (a *App) drawReadCaptured(c *Canvas) {
 	}
 
 	c.HLine(12, 100, 296, ColBorder)
-	c.DrawTextCentered(ScreenW/2, 110, "[Enter/4] TEST SEND   [5] SAVE .SUB", ColGreen, 1)
+	c.DrawTextCentered(ScreenW/2, 110, "[4] SEND  [5] SAVE  [7/V] SNAPSHOT", ColGreen, 1)
 
 	if a.ReadNoiseWarn {
 		drawConfirmBanner(c, "Looks like noise! Save anyway? [Enter=YES]")

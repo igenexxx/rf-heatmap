@@ -70,6 +70,8 @@ func (a *App) handleSavedKey(act KeyAction) {
 		a.handlePurgeNoiseKey()
 	case KeyTrim:
 		a.EnterTrimmerFromSaved()
+	case KeyInspect:
+		a.EnterSnapshotFromSaved()
 	}
 }
 
@@ -276,6 +278,9 @@ func (a *App) drawSaved(c *Canvas) {
 		title = fmt.Sprintf("User .sub Library (%d, %d sel)", len(a.SavedFiles), len(a.SavedSelected))
 	}
 	c.DrawText(6, 21, title, ColCyan, 1)
+	if len(a.SavedFiles) > 0 {
+		c.DrawText(256, 21, "[V:SNAP]", ColMuted, 1)
+	}
 	c.FillRect(6, 32, 308, 108, ColPanel)
 	c.DrawRect(6, 32, 308, 108, ColBorder)
 

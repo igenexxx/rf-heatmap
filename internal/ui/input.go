@@ -36,6 +36,7 @@ const (
 	KeyAutoLock
 	KeyFoxhunt
 	KeyTrim
+	KeyInspect
 )
 
 // Linux input_event (64-bit arm64): tv_sec(8), tv_usec(8), type(2), code(2), value(4) = 24 bytes.
@@ -65,6 +66,7 @@ const (
 	codeZ          uint16 = 44
 	codeX          uint16 = 45
 	codeC          uint16 = 46
+	codeV          uint16 = 47
 	codeB          uint16 = 48
 	codeM          uint16 = 50
 	codeSpace      uint16 = 57
@@ -106,6 +108,7 @@ var linuxKeyMap = map[uint16]KeyAction{
 	codeR:         KeyRank,
 	codeG:         KeyFoxhunt,
 	codeT:         KeyTrim,
+	codeV:         KeyInspect,
 }
 
 // MapLinuxKeyCode converts a Linux evdev keycode into a KeyAction.

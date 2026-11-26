@@ -209,7 +209,7 @@ func (s *Server) handleInitialize(id json.RawMessage) *rpcResponse {
 	return rpcOKResp(id, map[string]any{
 		"protocolVersion": ProtocolVersion,
 		"capabilities":    map[string]any{"tools": map[string]any{}},
-		"serverInfo":      map[string]any{"name": "rf-heatmap", "version": "0.3.9"},
+		"serverInfo":      map[string]any{"name": "rf-heatmap", "version": "0.4.0"},
 	})
 }
 
@@ -287,6 +287,8 @@ func (s *Server) dispatchTool(name string, rawArgs json.RawMessage) (*toolCallRe
 		return s.toolFoxhuntSample(rawArgs)
 	case "rf_trim_raw":
 		return s.toolTrimRaw(rawArgs)
+	case "rf_signal_snapshot":
+		return s.toolSignalSnapshot(rawArgs)
 	case "rf_measure_freq_offset":
 		return s.toolMeasureFreqOffset(rawArgs)
 	case "rf_set_tx_power":

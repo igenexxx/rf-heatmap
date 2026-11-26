@@ -49,6 +49,8 @@ func (a *App) handlePulseKey(act KeyAction) {
 		a.EnterFoxhunt(ModePulse)
 	case KeyTrim:
 		a.EnterTrimmerFromPulse()
+	case KeyInspect:
+		a.EnterSnapshotFromPulse()
 	}
 }
 

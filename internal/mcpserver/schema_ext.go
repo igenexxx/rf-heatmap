@@ -142,6 +142,50 @@ func (s *Server) extToolDefinitions() []toolDefinition {
 				},
 			},
 		},
+		{
+			Name:        "rf_signal_snapshot",
+			Description: "Build a time-domain OOK waveform snapshot and dual-polarity (+HIGH/-LOW) microsecond pulse-width histogram with K-Means Short/Long/Sync centroids for a saved .sub capture (RAW or Key) or inline pulses.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pack": map[string]any{
+						"type":        "string",
+						"description": "Optional source pack_id (default: user)",
+					},
+					"name": map[string]any{
+						"type":        "string",
+						"description": "Source .sub filename (no path separators; supports RAW and Key .sub files)",
+					},
+					"pulses": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "integer"},
+						"description": "Optional inline signed RAW_Data pulses (+high, -low in us) when name is omitted",
+					},
+					"freq_hz": map[string]any{
+						"type":        "integer",
+						"minimum":     minFreqHz,
+						"maximum":     maxFreqHz,
+						"description": "Carrier frequency in Hz for inline pulses (default 433920000)",
+					},
+					"preset": map[string]any{
+						"type":        "string",
+						"description": "Optional modem preset label for inline pulses (default AM650)",
+					},
+					"bins": map[string]any{
+						"type":        "integer",
+						"minimum":     8,
+						"maximum":     48,
+						"description": "Pulse-width histogram bucket count (8..48, default 24)",
+					},
+					"max_segments": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"maximum":     512,
+						"description": "Maximum waveform segments returned in waveform_preview (default 128)",
+					},
+				},
+			},
+		},
 	}
 	out := append(base, s.unlockToolDefinitions()...)
 	return append(out, s.mlNeuralToolDefinitions()...)
